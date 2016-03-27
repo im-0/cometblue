@@ -14,6 +14,10 @@ pip install -r requirements.txt
 # Install cometblue
 python setup.py install
 ```
+Using *pip*:
+```
+pip install cometblue
+```
 
 ## Command line tool
 ### Generic options
@@ -163,7 +167,7 @@ Day may be specified as a full weekday name, short weekday name or number (*"mon
  - *"-MM:HH:SS"* - from the beginning of day (*00:00:00*) to *MM:HH:SS*.
  - *"mm:hh:ss-MM:HH:SS"*
  - *"mm:hh:ss-"* - from *mm:hh:ss* to the the end of day (23:59:59).
- 
+
 ##### Changing holidays
 ```
 Usage: cometblue device set holiday [OPTIONS] HOLIDAY [START] [END]
@@ -214,6 +218,7 @@ Usage example:
 - Support flags
 - Support timer
 - Write tests
+- Python3
 
 ## Notes
 Tool and library may not work as expected because it is not well tested. Patches and bugreports are always welcome.
