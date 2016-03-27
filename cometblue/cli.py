@@ -51,34 +51,18 @@ def _get_log_level(level_str):
     }[level_str.upper()[0]]
 
 
+def _json_default_serializer(obj):
+    # Only supports datetime objects.
+    return obj.isoformat()
+
+
 class _JSONFormatter(object):
     def __init__(self):
         self._stream = sys.stdout
 
     def _print_any(self, value):
-        json.dump(value, self._stream)
+        json.dump(value, self._stream, default=_json_default_serializer)
         self._stream.flush()
-
-    def print_datetime(self, value):
-        self._print_any(value.isoformat())
-
-    def print_days(self, value):
-        days = [[dict(start=(None if period['start'] is None
-                             else period['start'].isoformat()),
-                      end=(None if period['end'] is None
-                           else period['end'].isoformat()))
-                 for period in day]
-                for day in value]
-        self._print_any(days)
-
-    def print_holidays(self, value):
-        holidays = [dict(start=(None if holiday['start'] is None
-                                else holiday['start'].isoformat()),
-                         end=(None if holiday['end'] is None
-                              else holiday['end'].isoformat()),
-                         temp=holiday['temp'])
-                    for holiday in value]
-        self._print_any(holidays)
 
     def __getattr__(self, item):
         if item.startswith('print_'):
@@ -243,7 +227,15 @@ class _ShellVarFormatter(object):
             return functools.partial(self._print_simple, item[len('print_'):])
 
 
+def _parse_time(time_str):
+    if time_str is None:
+        return None
+    return datetime.datetime.strptime(time_str, '%H:%M:%S').time()
+
+
 def _parse_datetime(datetime_str):
+    if datetime_str is None:
+        return None
     try:
         return datetime.datetime.strptime(
                 datetime_str, '%Y-%m-%d %H:%M:%S')
@@ -283,7 +275,7 @@ def _device_get_days(ctx):
             channel_type=ctx.obj.channel_type,
             security_level=ctx.obj.security_level,
             pin=ctx.obj.pin) as device:
-        days = list(map(device.get_day, range(7)))
+        days = device.get_days()
 
     ctx.obj.formatter.print_days(days)
 
@@ -299,7 +291,7 @@ def _device_get_holidays(ctx):
             channel_type=ctx.obj.channel_type,
             security_level=ctx.obj.security_level,
             pin=ctx.obj.pin) as device:
-        holidays = list(map(device.get_holiday, range(8)))
+        holidays = device.get_holidays()
 
     ctx.obj.formatter.print_holidays(holidays)
 
@@ -339,12 +331,12 @@ def _device_set_day(ctx, day, period):
                                        one_period.split('-')))
 
         if str_start:
-            start = datetime.datetime.strptime(str_start, '%H:%M:%S').time()
+            start = _parse_time(str_start)
         else:
             start = datetime.time()
 
         if str_end:
-            end = datetime.datetime.strptime(str_end, '%H:%M:%S').time()
+            end = _parse_time(str_end)
         else:
             end = datetime.time(23, 59, 59)
 
@@ -398,6 +390,73 @@ def _device_set_holiday(ctx, holiday, start, end, temperature):
         help='Set value (always requires PIN)')
 def _device_set():
     pass
+
+
+@click.command(
+        'backup',
+        help='Backup all supported configuration values in JSON format to file '
+             'or stdout')
+@click.argument(
+        'file_name',
+        default=None,
+        required=False)
+@click.pass_context
+def _device_backup(ctx, file_name):
+    with cometblue.device.CometBlue(
+            ctx.obj.device_address,
+            adapter=ctx.obj.adapter,
+            channel_type=ctx.obj.channel_type,
+            security_level=ctx.obj.security_level,
+            pin=ctx.obj.pin) as device:
+        backup = device.backup()
+
+    if file_name is None:
+        json.dump(backup, sys.stdout, default=_json_default_serializer)
+        sys.stdout.flush()
+    else:
+        with open(file_name, 'w') as backup_file:
+            json.dump(backup, backup_file, default=_json_default_serializer)
+
+
+@click.command(
+        'restore',
+        help='Restore configuration values from backup in JSON format (from '
+             'file or stdin)')
+@click.argument(
+        'file_name',
+        default=None,
+        required=False)
+@click.pass_context
+def _device_restore(ctx, file_name):
+    if file_name is None:
+        backup = json.load(sys.stdin)
+    else:
+        with open(file_name, 'r') as backup_file:
+            backup = json.load(backup_file)
+
+    if 'days' in backup:
+        backup['days'] = [
+            [dict(start=_parse_time(period['start']),
+                  end=_parse_time(period['end']))
+             for period in day]
+            for day in backup['days']
+        ]
+
+    if 'holidays' in backup:
+        backup['holidays'] = [
+            dict(start=_parse_datetime(holiday['start']),
+                 end=_parse_datetime(holiday['end']),
+                 temp=holiday['temp'])
+            for holiday in backup['holidays']
+        ]
+
+    with cometblue.device.CometBlue(
+            ctx.obj.device_address,
+            adapter=ctx.obj.adapter,
+            channel_type=ctx.obj.channel_type,
+            security_level=ctx.obj.security_level,
+            pin=ctx.obj.pin) as device:
+        device.restore(backup)
 
 
 @click.group(
@@ -632,6 +691,8 @@ def main():
 
     _device.add_command(_device_get)
     _device.add_command(_device_set)
+    _device.add_command(_device_backup)
+    _device.add_command(_device_restore)
 
     _device_get.add_command(_device_get_days)
     _device_get.add_command(_device_get_holidays)

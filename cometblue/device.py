@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import datetime
 import functools
+import itertools
 import logging
 import struct
 import uuid as uuid_module
@@ -471,3 +472,54 @@ class CometBlue(object):
             _log.info('Disconnecting from device "%s"...', self._device_address)
             self._device.disconnect()
             _log.info('Disconnected from device "%s"', self._device_address)
+
+    def get_days(self):
+        return list(map(self.get_day, range(7)))
+
+    def get_holidays(self):
+        return list(map(self.get_holiday, range(8)))
+
+    def backup(self):
+        _log.info('Saving all supported values from "%s"...',
+                  self._device_address)
+
+        data = {}
+
+        for val_name, val_conf in six.iteritems(self.SUPPORTED_VALUES):
+            if ('decode' not in val_conf) or ('encode' not in val_conf):
+                # Skip read-only or write-only value.
+                continue
+            if val_name in ('datetime', ):
+                # Restoring this from backup makes no sense.
+                continue
+
+            data[val_name] = getattr(self, 'get_' + val_name)()
+
+        for val_name in 'days', 'holidays':
+            data[val_name] = getattr(self, 'get_' + val_name)()
+
+        _log.info('All supported values from "%s" saved', self._device_address)
+
+        return data
+
+    def set_days(self, value):
+        for day_n, day in zip(itertools.count(), value):
+            self.set_day(day_n, day)
+
+    def set_holidays(self, value):
+        for holiday_n, holiday in zip(itertools.count(), value):
+            self.set_holiday(holiday_n, holiday)
+
+    def restore(self, data):
+        _log.info('Restoring values from backup for "%s"...',
+                  self._device_address)
+        _log.debug('Backup data: %r', data)
+
+        for val_name, val_data in six.iteritems(data):
+            getattr(self, 'set_' + val_name)(val_data)
+
+        if 'datetime' not in data:
+            self.set_datetime(datetime.datetime.now())
+
+        _log.info('Values from backup for "%s" successfully restored',
+                  self._device_address)
