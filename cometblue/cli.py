@@ -232,6 +232,15 @@ class _ShellVarFormatter(object):
             return functools.partial(self._print_simple, item[len('print_'):])
 
 
+def _parse_datetime(datetime_str):
+    try:
+        return datetime.datetime.strptime(
+                datetime_str, '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        return datetime.datetime.strptime(
+                datetime_str, '%Y-%m-%dT%H:%M:%S')
+
+
 @click.command(
         'discover',
         help='Discover "Comet Blue" Bluetooth LE devices')
@@ -339,6 +348,40 @@ def _device_set_day(ctx, day, period):
         device.set_day(day_index, periods)
 
 
+@click.command(
+        'holiday',
+        help='Set period and temperature for holiday (requires PIN)')
+@click.argument(
+        'holiday',
+        required=True)
+@click.argument(
+        'start',
+        required=True)
+@click.argument(
+        'end',
+        required=True)
+@click.argument(
+        'temperature',
+        type=float,
+        required=True)
+@click.pass_context
+def _device_set_holiday(ctx, holiday, start, end, temperature):
+    holiday_index = int(holiday) - 1
+    holiday_data = {
+        'start': _parse_datetime(start),
+        'end': _parse_datetime(end),
+        'temp': temperature,
+    }
+
+    with cometblue.device.CometBlue(
+            ctx.obj.device_address,
+            adapter=ctx.obj.adapter,
+            channel_type=ctx.obj.channel_type,
+            security_level=ctx.obj.security_level,
+            pin=ctx.obj.pin) as device:
+        device.set_holiday(holiday_index, holiday_data)
+
+
 @click.group(
         'set',
         help='Set value (always requires PIN)')
@@ -434,12 +477,7 @@ class _SetterFunctions(object):
             if dt is None:
                 parsed_dt = datetime.datetime.now()
             else:
-                try:
-                    parsed_dt = datetime.datetime.strptime(
-                            dt, '%Y-%m-%d %H:%M:%S')
-                except ValueError:
-                    parsed_dt = datetime.datetime.strptime(
-                            dt, '%Y-%m-%dT%H:%M:%S')
+                parsed_dt = _parse_datetime(dt)
 
             real_setter(ctx, parsed_dt)
 
@@ -580,5 +618,6 @@ if __name__ == '__main__':
     _device_get.add_command(_device_get_holidays)
 
     _device_set.add_command(_device_set_day)
+    _device_set.add_command(_device_set_holiday)
 
     main(obj=_ContextObj())

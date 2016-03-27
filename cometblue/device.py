@@ -227,6 +227,27 @@ def _decode_holiday(value):
     }
 
 
+def _encode_holiday(holiday):
+    if any(map(lambda v: v is None, six.itervalues(holiday))):
+        return struct.pack(_HOLIDAY_STRUCT,
+                           128, 128, 128, 128, 128, 128, 128, 128, -128)
+
+    if (holiday['start'].year < 2000) or (holiday['end'].year < 2000):
+        raise RuntimeError('Invalid year')
+
+    return struct.pack(
+            _HOLIDAY_STRUCT,
+            holiday['start'].hour,
+            holiday['start'].day,
+            holiday['start'].month,
+            holiday['start'].year - 2000,
+            holiday['end'].hour,
+            holiday['end'].day,
+            holiday['end'].month,
+            holiday['end'].year - 2000,
+            _temp_float_to_int(holiday, 'temp'))
+
+
 def _increase_uuid(uuid_str, n):
     uuid_obj = uuid_module.UUID(uuid_str)
     uuid_fields = list(uuid_obj.fields)
@@ -332,6 +353,7 @@ class CometBlue(object):
             'num': 8,
             'read_requires_pin': True,
             'decode': _decode_holiday,
+            'encode': _encode_holiday,
         },
     }
 
