@@ -161,6 +161,13 @@ class CometBlue(object):
             'decode': _decode_battery,
         },
 
+        'firmware_revision2': {
+            'description': 'firmware revision #2',
+            'uuid': '47e9ee2d-47e9-11e4-8939-164230d1df67',
+            'read_requires_pin': True,
+            'decode': str,
+        },
+
         'lcd_timer': {
             'description': 'LCD timer',
             'uuid': '47e9ee2e-47e9-11e4-8939-164230d1df67',
