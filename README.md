@@ -212,7 +212,6 @@ Usage example:
 
 ## Links
 - http://torsten-traenkner.de/wissen/smarthome/heizung.php
-- https://www.dropbox.com/s/cj7hdu8xusl6fcj/Dokumentation_Comet_Blue-BLE.pdf?dl=0
 
 ## TODO
 - Support flags
