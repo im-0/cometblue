@@ -6,6 +6,7 @@ import functools
 import itertools
 import json
 import logging
+import os
 import sys
 
 import click
@@ -455,7 +456,7 @@ def _device(ctx, address, pin, pin_file):
         show_default=True,
         default='error')
 @click.pass_context
-def main(ctx, adapter, channel_type, security_level, formatter, log_level):
+def _main(ctx, adapter, channel_type, security_level, formatter, log_level):
     _configure_logger(_get_log_level(log_level))
 
     ctx.obj.adapter = adapter
@@ -468,6 +469,8 @@ def main(ctx, adapter, channel_type, security_level, formatter, log_level):
         ctx.obj.formatter = _HumanReadableFormatter()
     else:
         ctx.obj.formatter = _ShellVarFormatter()
+
+    return os.EX_OK
 
 
 class _SetterFunctions(object):
@@ -619,13 +622,13 @@ def _add_values():
             _device_set.add_command(set_fn)
 
 
-if __name__ == '__main__':
+def main():
     _configure_logger()
 
     _add_values()
 
-    main.add_command(_discover)
-    main.add_command(_device)
+    _main.add_command(_discover)
+    _main.add_command(_device)
 
     _device.add_command(_device_get)
     _device.add_command(_device_set)
@@ -636,4 +639,8 @@ if __name__ == '__main__':
     _device_set.add_command(_device_set_day)
     _device_set.add_command(_device_set_holiday)
 
-    main(obj=_ContextObj())
+    return _main(obj=_ContextObj())
+
+
+if __name__ == '__main__':
+    exit(main())
