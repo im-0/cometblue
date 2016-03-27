@@ -11,6 +11,7 @@ import six
 
 _PIN_STRUCT = '<I'
 _DATETIME_STRUCT = '<BBBBB'
+_FLAGS_STRUCT = '<BBB'
 _TEMPERATURES_STRUCT = '<bbbbbbb'
 _LCD_TIMER_STRUCT = '<BB'
 
@@ -41,6 +42,11 @@ def _encode_datetime(dt):
             dt.day,
             dt.month,
             dt.year - 2000)
+
+
+def _decode_flags(value):
+    f1, f2, f3 = struct.unpack(_FLAGS_STRUCT, value)
+    return '%s %s %s' % tuple(map(bin, (f1, f2, f3)))
 
 
 def _decode_temperatures(value):
@@ -144,6 +150,13 @@ class CometBlue(object):
             'read_requires_pin': True,
             'decode': _decode_datetime,
             'encode': _encode_datetime,
+        },
+
+        'flags': {
+            'description': 'flags',
+            'uuid': '47e9ee2a-47e9-11e4-8939-164230d1df67',
+            'read_requires_pin': True,
+            'decode': _decode_flags,
         },
 
         'temperatures': {
