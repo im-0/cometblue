@@ -351,17 +351,26 @@ def _device_set_day(ctx, day, period):
         required=True)
 @click.argument(
         'start',
-        required=True)
+        required=False,
+        default=None)
 @click.argument(
         'end',
-        required=True)
+        required=False,
+        default=None)
 @click.argument(
         'temperature',
         type=float,
-        required=True)
+        required=False,
+        default=None)
 @click.pass_context
 def _device_set_holiday(ctx, holiday, start, end, temperature):
     holiday_index = int(holiday) - 1
+
+    if any(map(lambda v: v is None, (start, end, temperature))):
+        start = None
+        end = None
+        temperature = None
+
     holiday_data = {
         'start': _parse_datetime(start),
         'end': _parse_datetime(end),
