@@ -2,12 +2,19 @@ from __future__ import absolute_import
 
 import functools
 import logging
+import struct
 
 import gattlib
 import six
 
 
+_PIN_STRUCT = '<I'
+
 _log = logging.getLogger(__name__)
+
+
+def _encode_pin(pin):
+    return struct.pack(_PIN_STRUCT, pin)
 
 
 class CometBlue(object):
@@ -41,6 +48,12 @@ class CometBlue(object):
             'uuid': '00002a29-0000-1000-8000-00805f9b34fb',
             'decode': str,
         },
+
+        'pin': {
+            'description': 'PIN',
+            'uuid': '47e9ee30-47e9-11e4-8939-164230d1df67',
+            'encode': _encode_pin,
+        },
     }
 
     def _read_value(self, uuid, decode):
@@ -56,26 +69,65 @@ class CometBlue(object):
             raise RuntimeError('Got more than one value')
         return decode(value[0])
 
+    def _write_value(self, uuid, encode, value):
+        if not self._device.is_connected():
+            raise RuntimeError('Not connected')
+        if self._pin is None:
+            raise RuntimeError('PIN required')
+
+        _log.debug('Writing value "%s" to "%s": %r...',
+                   uuid, self._device_address, value)
+        self._device.write_by_handle(self._chars[uuid], encode(value))
+        _log.debug('Wrote value "%s" to "%s": %r',
+                   uuid, self._device_address, value)
+
     def __init__(self, address, adapter='hci0', channel_type='public',
-                 security_level='low'):
+                 security_level='low', pin=None):
         self._device_address = address
         self._device = gattlib.GATTRequester(str(address), False, str(adapter))
         self._channel_type = channel_type
         self._security_level = security_level
+        self._chars = None
+        self._pin = pin
 
         for val_name, val_conf in six.iteritems(self.SUPPORTED_VALUES):
-            setattr(
-                    self,
-                    'get_' + val_name,
-                    functools.partial(
-                            self._read_value,
-                            str(val_conf['uuid']),
-                            val_conf['decode']))
+            if 'decode' in val_conf:
+                setattr(
+                        self,
+                        'get_' + val_name,
+                        functools.partial(
+                                self._read_value,
+                                str(val_conf['uuid']),
+                                val_conf['decode']))
+            if 'encode' in val_conf:
+                setattr(
+                        self,
+                        'set_' + val_name,
+                        functools.partial(
+                                self._write_value,
+                                str(val_conf['uuid']),
+                                val_conf['encode']))
 
     def __enter__(self):
         _log.info('Connecting to device "%s"...', self._device_address)
         self._device.connect(wait=True, channel_type=self._channel_type,
                              security_level=self._security_level)
+
+        _log.debug('Discovering characteristics for "%s"...',
+                   self._device_address)
+        chars = self._device.discover_characteristics(0x0001, 0xffff, '')
+        _log.debug('Discovered characteristics for "%s": %r',
+                   self._device_address, chars)
+        self._chars = dict(
+                (char_data['uuid'], char_data['value_handle'])
+                for char_data in chars)
+
+        if self._pin is not None:
+            try:
+                self.set_pin(self._pin)
+            except RuntimeError as exc:
+                raise RuntimeError('Invalid PIN', exc)
+
         _log.info('Connected to device "%s"', self._device_address)
         return self
 
