@@ -279,6 +279,57 @@ class _SetterFunctions(object):
 
         return set_datetime
 
+    @staticmethod
+    def temperatures(real_setter):
+        @click.option(
+                '--temp-manual', '-m',
+                type=float,
+                default=None,
+                help='Temperature for manual mode')
+        @click.option(
+                '--temp-target-low', '-t',
+                type=float,
+                default=None,
+                help='Target temperature low')
+        @click.option(
+                '--temp-target-high', '-T',
+                type=float,
+                default=None,
+                help='Target temperature high')
+        @click.option(
+                '--temp-offset', '-o',
+                type=float,
+                default=None,
+                help='Offset temperature')
+        @click.option(
+                '--window-open-detect', '-w',
+                type=int,
+                default=None,
+                help='Window open detection')
+        @click.option(
+                '--window-open-minutes', '-W',
+                type=int,
+                default=None,
+                help='Window open minutes')
+        @click.pass_context
+        def set_temperatures(ctx, temp_manual, temp_target_low,
+                             temp_target_high, temp_offset, window_open_detect,
+                             window_open_minutes):
+            temps = {
+                'manual_temp': temp_manual,
+                'target_temp_l': temp_target_low,
+                'target_temp_h': temp_target_high,
+                'offset_temp': temp_offset,
+                'window_open_detection': window_open_detect,
+                'window_open_minutes': window_open_minutes,
+            }
+            if all(map(lambda v: v is None, six.itervalues(temps))):
+                raise RuntimeError(
+                        'No new values to set, try "temperatures -h"')
+            real_setter(ctx, temps)
+
+        return set_temperatures
+
 
 def _add_values():
     for val_name, val_conf in six.iteritems(

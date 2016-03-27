@@ -57,6 +57,32 @@ def _decode_temperatures(value):
     }
 
 
+def _temp_float_to_int(temps_dict, var_name):
+    var_val = temps_dict.get(var_name)
+    if var_val is None:
+        return -128  # do not change setting
+    return int(var_val * 2.0)
+
+
+def _temp_int_to_int(temps_dict, var_name):
+    var_val = temps_dict.get(var_name)
+    if var_val is None:
+        return -128  # do not change setting
+    return var_val
+
+
+def _encode_temperatures(temps):
+    return struct.pack(
+            _TEMPERATURES_STRUCT,
+            -128,  # current_temp
+            _temp_float_to_int(temps, 'manual_temp'),
+            _temp_float_to_int(temps, 'target_temp_l'),
+            _temp_float_to_int(temps, 'target_temp_h'),
+            _temp_float_to_int(temps, 'offset_temp'),
+            _temp_int_to_int(temps, 'window_open_detection'),
+            _temp_int_to_int(temps, 'window_open_minutes'))
+
+
 def _decode_battery(value):
     value = ord(value)
     if value == 255:
@@ -109,6 +135,7 @@ class CometBlue(object):
             'uuid': '47e9ee2b-47e9-11e4-8939-164230d1df67',
             'read_requires_pin': True,
             'decode': _decode_temperatures,
+            'encode': _encode_temperatures,
         },
 
         'battery': {
