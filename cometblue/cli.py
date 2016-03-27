@@ -27,7 +27,7 @@ class _ContextObj(object):
     pass
 
 
-def _configure_logger():
+def _configure_logger(level=logging.ERROR):
     root_logger = logging.getLogger()
     list(map(root_logger.removeHandler, root_logger.handlers[:]))
     list(map(root_logger.removeFilter, root_logger.filters[:]))
@@ -35,9 +35,19 @@ def _configure_logger():
         format=' %(levelname).1s|%(asctime)s|%(process)d:%(thread)d| '
                '%(message)s',
         stream=sys.stderr,
-        level=logging.INFO)
+        level=level)
     global _log
     _log = logging.getLogger()
+
+
+def _get_log_level(level_str):
+    return {
+        'D': logging.DEBUG,
+        'I': logging.INFO,
+        'W': logging.WARNING,
+        'E': logging.ERROR,
+        'C': logging.CRITICAL,
+    }[level_str.upper()[0]]
 
 
 class _JSONFormatter(object):
@@ -440,8 +450,14 @@ def _device(ctx, address, pin, pin_file):
         show_default=True,
         default='human-readable',
         help='Output formatter')
+@click.option(
+        '--log-level', '-L',
+        show_default=True,
+        default='error')
 @click.pass_context
-def main(ctx, adapter, channel_type, security_level, formatter):
+def main(ctx, adapter, channel_type, security_level, formatter, log_level):
+    _configure_logger(_get_log_level(log_level))
+
     ctx.obj.adapter = adapter
     ctx.obj.channel_type = channel_type
     ctx.obj.security_level = security_level
