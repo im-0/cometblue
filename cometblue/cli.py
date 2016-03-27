@@ -88,6 +88,9 @@ class _HumanReadableFormatter(object):
         self._stream.write(text)
         self._stream.flush()
 
+    def print_lcd_timer(self, value):
+        self._print_simple('%02u:%02u' % (value['preload'], value['current']))
+
     def __getattr__(self, item):
         if item.startswith('print_'):
             return self._print_simple
@@ -140,6 +143,10 @@ class _ShellVarFormatter(object):
                     _SHELL_VAR_PREFIX + '%s=%s\n' % (
                         var_name.upper(), shellescape.quote(val_str)))
         self._stream.flush()
+
+    def print_lcd_timer(self, value):
+        self._print_simple('lcd_timer_preload', '%u' % value['preload'])
+        self._print_simple('lcd_timer_current', '%u' % value['current'])
 
     def __getattr__(self, item):
         if item.startswith('print_'):
@@ -329,6 +336,20 @@ class _SetterFunctions(object):
             real_setter(ctx, temps)
 
         return set_temperatures
+
+    @staticmethod
+    def lcd_timer(real_setter):
+        @click.argument(
+                'value',
+                required=True)
+        @click.pass_context
+        def set_lcd_timer(ctx, value):
+            lcd_timer = {
+                'preload': int(value),
+            }
+            real_setter(ctx, lcd_timer)
+
+        return set_lcd_timer
 
 
 def _add_values():

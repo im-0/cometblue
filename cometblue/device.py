@@ -12,6 +12,7 @@ import six
 _PIN_STRUCT = '<I'
 _DATETIME_STRUCT = '<BBBBB'
 _TEMPERATURES_STRUCT = '<bbbbbbb'
+_LCD_TIMER_STRUCT = '<BB'
 
 _log = logging.getLogger(__name__)
 
@@ -90,6 +91,21 @@ def _decode_battery(value):
     return value
 
 
+def _decode_lcd_timer(value):
+    preload, current = struct.unpack(_LCD_TIMER_STRUCT, value)
+    return {
+        'preload': preload,
+        'current': current,
+    }
+
+
+def _encode_lcd_timer(lcd_timer):
+    return struct.pack(
+            _LCD_TIMER_STRUCT,
+            lcd_timer['preload'],
+            0)
+
+
 class CometBlue(object):
     SUPPORTED_VALUES = {
         'device_name': {
@@ -143,6 +159,14 @@ class CometBlue(object):
             'uuid': '47e9ee2c-47e9-11e4-8939-164230d1df67',
             'read_requires_pin': True,
             'decode': _decode_battery,
+        },
+
+        'lcd_timer': {
+            'description': 'LCD timer',
+            'uuid': '47e9ee2e-47e9-11e4-8939-164230d1df67',
+            'read_requires_pin': True,
+            'decode': _decode_lcd_timer,
+            'encode': _encode_lcd_timer,
         },
 
         'pin': {
