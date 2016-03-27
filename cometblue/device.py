@@ -165,6 +165,32 @@ def _decode_day(value):
     return day
 
 
+def _encode_day(periods):
+    if len(periods) > 4:
+        raise RuntimeError('Too many periods')
+    periods = list(periods)
+    periods.extend([dict(start=None, end=None)] * (4 - len(periods)))
+
+    values = []
+    for period in periods:
+        if period['start'] is None:
+            start = 255
+            end = 255
+        else:
+            start = (period['start'].hour * 60 + period['start'].minute) / 10
+            end = (period['end'].hour * 60 + period['end'].minute) / 10
+
+        if start == 0:
+            start = 255
+        if end == 0:
+            end = 255
+
+        values.append(start)
+        values.append(end)
+
+    return struct.pack(_DAY_STRUCT, *values)
+
+
 def _increase_uuid(uuid_str, n):
     uuid_obj = uuid_module.UUID(uuid_str)
     uuid_fields = list(uuid_obj.fields)
@@ -262,6 +288,7 @@ class CometBlue(object):
             'num': 7,
             'read_requires_pin': True,
             'decode': _decode_day,
+            'encode': _encode_day,
         },
     }
 
@@ -296,6 +323,11 @@ class CometBlue(object):
         self._device.write_by_handle(self._chars[uuid], encode(value))
         _log.debug('Wrote value "%s" to "%s": %r',
                    uuid, self._device_address, value)
+
+    def _write_value_n(self, uuid, encode, max_n, n, value):
+        if (n < 0) or (n >= max_n):
+            raise RuntimeError('Invalid table row number')
+        return self._write_value(_increase_uuid(uuid, n), encode, value)
 
     def __init__(self, address, adapter='hci0', channel_type='public',
                  security_level='low', pin=None):
@@ -335,6 +367,15 @@ class CometBlue(object):
                                 str(val_conf['uuid']),
                                 val_conf['decode'],
                                 val_conf.get('read_requires_pin', False),
+                                val_conf['num']))
+            if 'encode' in val_conf:
+                setattr(
+                        self,
+                        'set_' + val_name,
+                        functools.partial(
+                                self._write_value_n,
+                                str(val_conf['uuid']),
+                                val_conf['encode'],
                                 val_conf['num']))
 
     def __enter__(self):

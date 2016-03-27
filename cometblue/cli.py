@@ -235,6 +235,54 @@ def _device_get():
     pass
 
 
+@click.command(
+        'day',
+        help='Set periods per days of the week (requires PIN)')
+@click.argument(
+        'day',
+        required=True)
+@click.argument(
+        'period',
+        nargs=-1)
+@click.pass_context
+def _device_set_day(ctx, day, period):
+    try:
+        day_index = int(day) - 1
+    except ValueError:
+        day_index = None
+        for day_n, day_name in zip(itertools.count(), _WEEK_DAYS):
+            if day.lower().startswith(day_name):
+                day_index = day_n
+                break
+        if day_index is None:
+            raise RuntimeError('Unknown day: "%s"' % day)
+
+    periods = []
+    for one_period in period:
+        str_start, str_end = tuple(map(lambda s: s.strip(),
+                                       one_period.split('-')))
+
+        if str_start:
+            start = datetime.datetime.strptime(str_start, '%H:%M:%S').time()
+        else:
+            start = datetime.time()
+
+        if str_end:
+            end = datetime.datetime.strptime(str_end, '%H:%M:%S').time()
+        else:
+            end = datetime.time(23, 59, 59)
+
+        periods.append(dict(start=start, end=end))
+
+    with cometblue.device.CometBlue(
+            ctx.obj.device_address,
+            adapter=ctx.obj.adapter,
+            channel_type=ctx.obj.channel_type,
+            security_level=ctx.obj.security_level,
+            pin=ctx.obj.pin) as device:
+        device.set_day(day_index, periods)
+
+
 @click.group(
         'set',
         help='Set value (always requires PIN)')
@@ -473,5 +521,7 @@ if __name__ == '__main__':
     _device.add_command(_device_set)
 
     _device_get.add_command(_device_get_days)
+
+    _device_set.add_command(_device_set_day)
 
     main(obj=_ContextObj())
