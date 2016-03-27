@@ -11,12 +11,14 @@ import sys
 import click
 import shellescape
 import six
+import tabulate
 
 import cometblue.device
 import cometblue.discovery
 
 
 _SHELL_VAR_PREFIX = 'COMETBLUE_'
+_WEEK_DAYS = ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')
 
 _log = None
 
@@ -48,6 +50,15 @@ class _JSONFormatter(object):
 
     def print_datetime(self, value):
         self._print_any(value.isoformat())
+
+    def print_days(self, value):
+        days = [[dict(start=(None if period['start'] is None
+                             else period['start'].isoformat()),
+                      end=(None if period['end'] is None
+                           else period['end'].isoformat()))
+                 for period in day]
+                for day in value]
+        self._print_any(days)
 
     def __getattr__(self, item):
         if item.startswith('print_'):
@@ -90,6 +101,22 @@ class _HumanReadableFormatter(object):
 
     def print_lcd_timer(self, value):
         self._print_simple('%02u:%02u' % (value['preload'], value['current']))
+
+    def print_days(self, value):
+        table = zip(
+                itertools.count(1),
+                map(lambda s: s[0].upper() + s[1:], _WEEK_DAYS),
+                *zip(*[[('' if period['start'] is None
+                         else '%s - %s' % (period['start'].isoformat(),
+                                           period['end'].isoformat()))
+                        for period in day]
+                       for day in value]))
+        self._print_simple(
+                tabulate.tabulate(
+                        table,
+                        headers=('N', 'Day', 'Period #1', 'Period #2',
+                                 'Period #3', 'Period #4'),
+                        tablefmt='psql'))
 
     def __getattr__(self, item):
         if item.startswith('print_'):
@@ -148,6 +175,18 @@ class _ShellVarFormatter(object):
         self._print_simple('lcd_timer_preload', '%u' % value['preload'])
         self._print_simple('lcd_timer_current', '%u' % value['current'])
 
+    def print_days(self, value):
+        for day_n, day in zip(itertools.count(), value):
+            for period_n, period in zip(itertools.count(), day):
+                for var_name in 'start', 'end':
+                    var_val = ('' if period[var_name] is None
+                               else period[var_name].isoformat())
+                    self._stream.write(
+                            _SHELL_VAR_PREFIX + 'DAY_%u_PERIOD_%u_%s=%s\n' % (
+                                day_n, period_n, var_name.upper(),
+                                shellescape.quote(var_val)))
+        self._stream.flush()
+
     def __getattr__(self, item):
         if item.startswith('print_'):
             return functools.partial(self._print_simple, item[len('print_'):])
@@ -171,6 +210,22 @@ def _discover(ctx, timeout):
     devices = [dict(name=name, address=address)
                for address, name in six.iteritems(devices)]
     ctx.obj.formatter.print_discovered_devices(devices)
+
+
+@click.command(
+        'days',
+        help='Get configured periods per days of the week (requires PIN)')
+@click.pass_context
+def _device_get_days(ctx):
+    with cometblue.device.CometBlue(
+            ctx.obj.device_address,
+            adapter=ctx.obj.adapter,
+            channel_type=ctx.obj.channel_type,
+            security_level=ctx.obj.security_level,
+            pin=ctx.obj.pin) as device:
+        days = list(map(device.get_day, range(7)))
+
+    ctx.obj.formatter.print_days(days)
 
 
 @click.group(
@@ -416,5 +471,7 @@ if __name__ == '__main__':
 
     _device.add_command(_device_get)
     _device.add_command(_device_set)
+
+    _device_get.add_command(_device_get_days)
 
     main(obj=_ContextObj())

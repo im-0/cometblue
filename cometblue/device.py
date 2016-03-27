@@ -4,6 +4,7 @@ import datetime
 import functools
 import logging
 import struct
+import uuid as uuid_module
 
 import gattlib
 import six
@@ -14,6 +15,7 @@ _DATETIME_STRUCT = '<BBBBB'
 _FLAGS_STRUCT = '<BBB'
 _TEMPERATURES_STRUCT = '<bbbbbbb'
 _LCD_TIMER_STRUCT = '<BB'
+_DAY_STRUCT = '<BBBBBBBB'
 
 _log = logging.getLogger(__name__)
 
@@ -112,6 +114,64 @@ def _encode_lcd_timer(lcd_timer):
             0)
 
 
+def _day_period_cmp(p1, p2):
+    if p1['start'] is None:
+        return 1
+    if p2['start'] is None:
+        return -1
+    return cmp(p1['start'], p2['start'])
+
+
+def _decode_day(value):
+    max_raw_time = ((23 * 60) + 59) / 10
+
+    raw_time_values = list(struct.unpack(_DAY_STRUCT, value))
+    day = []
+    while raw_time_values:
+        raw_start = raw_time_values.pop(0)
+        raw_end = raw_time_values.pop(0)
+
+        if raw_end > max_raw_time:
+            start = None
+            end = None
+        else:
+            if raw_start > max_raw_time:
+                start = datetime.time()
+            else:
+                raw_start *= 10
+                start = datetime.time(hour=raw_start / 60,
+                                      minute=raw_start % 60)
+
+            if raw_end > max_raw_time:
+                end = datetime.time(23, 59, 59)
+            else:
+                raw_end *= 10
+                end = datetime.time(hour=raw_end / 60,
+                                    minute=raw_end % 60)
+
+        if start == end:
+            day.append({
+                'start': None,
+                'end': None,
+            })
+        else:
+            day.append({
+                'start': start,
+                'end': end,
+            })
+
+    day.sort(_day_period_cmp)
+
+    return day
+
+
+def _increase_uuid(uuid_str, n):
+    uuid_obj = uuid_module.UUID(uuid_str)
+    uuid_fields = list(uuid_obj.fields)
+    uuid_fields[0] += n
+    return str(uuid_module.UUID(fields=uuid_fields))
+
+
 class CometBlue(object):
     SUPPORTED_VALUES = {
         'device_name': {
@@ -196,6 +256,15 @@ class CometBlue(object):
         },
     }
 
+    SUPPORTED_TABLE_VALUES = {
+        'day': {
+            'uuid': '47e9ee10-47e9-11e4-8939-164230d1df67',
+            'num': 7,
+            'read_requires_pin': True,
+            'decode': _decode_day,
+        },
+    }
+
     def _read_value(self, uuid, decode, pin_required):
         if not self._device.is_connected():
             raise RuntimeError('Not connected')
@@ -210,6 +279,11 @@ class CometBlue(object):
         if len(value) != 1:
             raise RuntimeError('Got more than one value')
         return decode(value[0])
+
+    def _read_value_n(self, uuid, decode, pin_required, max_n, n):
+        if (n < 0) or (n >= max_n):
+            raise RuntimeError('Invalid table row number')
+        return self._read_value(_increase_uuid(uuid, n), decode, pin_required)
 
     def _write_value(self, uuid, encode, value):
         if not self._device.is_connected():
@@ -250,6 +324,18 @@ class CometBlue(object):
                                 self._write_value,
                                 str(val_conf['uuid']),
                                 val_conf['encode']))
+
+        for val_name, val_conf in six.iteritems(self.SUPPORTED_TABLE_VALUES):
+            if 'decode' in val_conf:
+                setattr(
+                        self,
+                        'get_' + val_name,
+                        functools.partial(
+                                self._read_value_n,
+                                str(val_conf['uuid']),
+                                val_conf['decode'],
+                                val_conf.get('read_requires_pin', False),
+                                val_conf['num']))
 
     def __enter__(self):
         _log.info('Connecting to device "%s"...', self._device_address)

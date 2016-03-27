@@ -2,3 +2,4 @@ click
 gattlib
 shellescape
 six
+tabulate
