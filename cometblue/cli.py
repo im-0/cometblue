@@ -69,6 +69,12 @@ class _HumanReadableFormatter(object):
     def print_datetime(self, value):
         self._print_simple(value.isoformat(' '))
 
+    def print_battery(self, value):
+        if value is None:
+            self._print_simple('No information')
+        else:
+            self._print_simple('%u%%' % value)
+
     def __getattr__(self, item):
         if item.startswith('print_'):
             return self._print_simple
@@ -97,6 +103,12 @@ class _ShellVarFormatter(object):
 
     def print_datetime(self, value):
         self._print_simple('datetime', value.isoformat())
+
+    def print_battery(self, value):
+        if value is None:
+            self._print_simple('battery', '')
+        else:
+            self._print_simple('battery', '%u' % value)
 
     def __getattr__(self, item):
         if item.startswith('print_'):

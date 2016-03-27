@@ -41,6 +41,13 @@ def _encode_datetime(dt):
             dt.year - 2000)
 
 
+def _decode_battery(value):
+    value = ord(value)
+    if value == 255:
+        return None
+    return value
+
+
 class CometBlue(object):
     SUPPORTED_VALUES = {
         'device_name': {
@@ -79,6 +86,13 @@ class CometBlue(object):
             'read_requires_pin': True,
             'decode': _decode_datetime,
             'encode': _encode_datetime,
+        },
+
+        'battery': {
+            'description': 'battery charge',
+            'uuid': '47e9ee2c-47e9-11e4-8939-164230d1df67',
+            'read_requires_pin': True,
+            'decode': _decode_battery,
         },
 
         'pin': {
