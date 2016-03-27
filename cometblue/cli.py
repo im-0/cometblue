@@ -40,13 +40,13 @@ class _JSONFormatter(object):
     def __init__(self):
         self._stream = sys.stdout
 
-    def print_any(self, value):
+    def _print_any(self, value):
         json.dump(value, self._stream)
         self._stream.flush()
 
     def __getattr__(self, item):
         if item.startswith('print_'):
-            return self.print_any
+            return self._print_any
 
 
 class _HumanReadableFormatter(object):
