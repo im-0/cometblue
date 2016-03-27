@@ -11,6 +11,7 @@ import six
 
 _PIN_STRUCT = '<I'
 _DATETIME_STRUCT = '<BBBBB'
+_TEMPERATURES_STRUCT = '<bbbbbbb'
 
 _log = logging.getLogger(__name__)
 
@@ -39,6 +40,21 @@ def _encode_datetime(dt):
             dt.day,
             dt.month,
             dt.year - 2000)
+
+
+def _decode_temperatures(value):
+    cur_temp, manual_temp, target_low, target_high, offset_temp, \
+            window_open_detect, window_open_minutes = struct.unpack(
+                    _TEMPERATURES_STRUCT, value)
+    return {
+        'current_temp': cur_temp / 2.0,
+        'manual_temp': manual_temp / 2.0,
+        'target_temp_l': target_low / 2.0,
+        'target_temp_h': target_high / 2.0,
+        'offset_temp': offset_temp / 2.0,
+        'window_open_detection': window_open_detect,
+        'window_open_minutes': window_open_minutes,
+    }
 
 
 def _decode_battery(value):
@@ -86,6 +102,13 @@ class CometBlue(object):
             'read_requires_pin': True,
             'decode': _decode_datetime,
             'encode': _encode_datetime,
+        },
+
+        'temperatures': {
+            'description': 'temperatures',
+            'uuid': '47e9ee2b-47e9-11e4-8939-164230d1df67',
+            'read_requires_pin': True,
+            'decode': _decode_temperatures,
         },
 
         'battery': {

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
 import datetime
@@ -75,6 +76,18 @@ class _HumanReadableFormatter(object):
         else:
             self._print_simple('%u%%' % value)
 
+    def print_temperatures(self, value):
+        text = ''
+        text += 'Current temperature: %.01f °C\n' % value['current_temp']
+        text += 'Temperature for manual mode: %.01f °C\n' % value['manual_temp']
+        text += 'Target temperature low: %.01f °C\n' % value['target_temp_l']
+        text += 'Target temperature high: %.01f °C\n' % value['target_temp_h']
+        text += 'Offset temperature: %.01f °C\n' % value['offset_temp']
+        text += 'Window open detection: %u\n' % value['window_open_detection']
+        text += 'Window open minutes: %u\n' % value['window_open_minutes']
+        self._stream.write(text)
+        self._stream.flush()
+
     def __getattr__(self, item):
         if item.startswith('print_'):
             return self._print_simple
@@ -109,6 +122,24 @@ class _ShellVarFormatter(object):
             self._print_simple('battery', '')
         else:
             self._print_simple('battery', '%u' % value)
+
+    def print_temperatures(self, value):
+        for var_name in ('current_temp',
+                         'manual_temp',
+                         'target_temp_l',
+                         'target_temp_h',
+                         'offset_temp'):
+            val_str = '%f' % value[var_name]
+            self._stream.write(
+                    _SHELL_VAR_PREFIX + '%s=%s\n' % (
+                        var_name.upper(), shellescape.quote(val_str)))
+        for var_name in ('window_open_detection',
+                         'window_open_minutes'):
+            val_str = '%u' % value[var_name]
+            self._stream.write(
+                    _SHELL_VAR_PREFIX + '%s=%s\n' % (
+                        var_name.upper(), shellescape.quote(val_str)))
+        self._stream.flush()
 
     def __getattr__(self, item):
         if item.startswith('print_'):
