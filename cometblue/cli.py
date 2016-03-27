@@ -60,6 +60,15 @@ class _JSONFormatter(object):
                 for day in value]
         self._print_any(days)
 
+    def print_holidays(self, value):
+        holidays = [dict(start=(None if holiday['start'] is None
+                                else holiday['start'].isoformat()),
+                         end=(None if holiday['end'] is None
+                              else holiday['end'].isoformat()),
+                         temp=holiday['temp'])
+                    for holiday in value]
+        self._print_any(holidays)
+
     def __getattr__(self, item):
         if item.startswith('print_'):
             return self._print_any
@@ -116,6 +125,20 @@ class _HumanReadableFormatter(object):
                         table,
                         headers=('N', 'Day', 'Period #1', 'Period #2',
                                  'Period #3', 'Period #4'),
+                        tablefmt='psql'))
+
+    def print_holidays(self, value):
+        table = zip(
+                itertools.count(1),
+                *zip(*[(('', '', '') if holiday['start'] is None
+                        else (holiday['start'].isoformat(' '),
+                              holiday['end'].isoformat(' '),
+                              '%.01f' % holiday['temp']))
+                       for holiday in value]))
+        self._print_simple(
+                tabulate.tabulate(
+                        table,
+                        headers=('N', 'Start', 'End', 'Temperature'),
                         tablefmt='psql'))
 
     def __getattr__(self, item):
@@ -187,6 +210,23 @@ class _ShellVarFormatter(object):
                                 shellescape.quote(var_val)))
         self._stream.flush()
 
+    def print_holidays(self, value):
+        for holiday_n, holiday in zip(itertools.count(), value):
+            for var_name in 'start', 'end':
+                var_val = ('' if holiday[var_name] is None
+                           else holiday[var_name].isoformat())
+                self._stream.write(
+                        _SHELL_VAR_PREFIX + 'HOLIDAY_%u_%s=%s\n' % (
+                            holiday_n, var_name.upper(),
+                            shellescape.quote(var_val)))
+            self._stream.write(
+                    _SHELL_VAR_PREFIX + 'HOLIDAY_%u_TEMP=%s\n' % (
+                        holiday_n, shellescape.quote(
+                                '' if holiday['temp'] is None
+                                else '%f' % holiday['temp'])))
+        self._stream.flush()
+
+
     def __getattr__(self, item):
         if item.startswith('print_'):
             return functools.partial(self._print_simple, item[len('print_'):])
@@ -226,6 +266,22 @@ def _device_get_days(ctx):
         days = list(map(device.get_day, range(7)))
 
     ctx.obj.formatter.print_days(days)
+
+
+@click.command(
+        'holidays',
+        help='Get configured holidays (requires PIN)')
+@click.pass_context
+def _device_get_holidays(ctx):
+    with cometblue.device.CometBlue(
+            ctx.obj.device_address,
+            adapter=ctx.obj.adapter,
+            channel_type=ctx.obj.channel_type,
+            security_level=ctx.obj.security_level,
+            pin=ctx.obj.pin) as device:
+        holidays = list(map(device.get_holiday, range(8)))
+
+    ctx.obj.formatter.print_holidays(holidays)
 
 
 @click.group(
@@ -521,6 +577,7 @@ if __name__ == '__main__':
     _device.add_command(_device_set)
 
     _device_get.add_command(_device_get_days)
+    _device_get.add_command(_device_get_holidays)
 
     _device_set.add_command(_device_set_day)
 

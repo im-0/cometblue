@@ -16,6 +16,7 @@ _FLAGS_STRUCT = '<BBB'
 _TEMPERATURES_STRUCT = '<bbbbbbb'
 _LCD_TIMER_STRUCT = '<BB'
 _DAY_STRUCT = '<BBBBBBBB'
+_HOLIDAY_STRUCT = '<BBBBBBBBb'
 
 _log = logging.getLogger(__name__)
 
@@ -191,6 +192,41 @@ def _encode_day(periods):
     return struct.pack(_DAY_STRUCT, *values)
 
 
+def _decode_holiday(value):
+    ho_start, da_start, mo_start, ye_start, \
+            ho_end, da_end, mo_end, ye_end, \
+            temp = struct.unpack(_HOLIDAY_STRUCT, value)
+
+    if (ho_start > 23) or (ho_end > 23) \
+            or (da_start > 31) or (da_end > 31) \
+            or (da_start < 1) or (da_end < 1) \
+            or (mo_start > 12) or (mo_end > 12) \
+            or (mo_start < 1) or (mo_end < 1) \
+            or (ye_start > 99) or (ye_end > 99) \
+            or (temp == -128):
+        start = None
+        end = None
+        temp = None
+    else:
+        start = datetime.datetime(
+                year=ye_start + 2000,
+                month=mo_start,
+                day=da_start,
+                hour=ho_start)
+        end = datetime.datetime(
+                year=ye_end + 2000,
+                month=mo_end,
+                day=da_end,
+                hour=ho_end)
+        temp = temp / 2.0
+
+    return {
+        'start': start,
+        'end': end,
+        'temp': temp,
+    }
+
+
 def _increase_uuid(uuid_str, n):
     uuid_obj = uuid_module.UUID(uuid_str)
     uuid_fields = list(uuid_obj.fields)
@@ -289,6 +325,13 @@ class CometBlue(object):
             'read_requires_pin': True,
             'decode': _decode_day,
             'encode': _encode_day,
+        },
+
+        'holiday': {
+            'uuid': '47e9ee20-47e9-11e4-8939-164230d1df67',
+            'num': 8,
+            'read_requires_pin': True,
+            'decode': _decode_holiday,
         },
     }
 
