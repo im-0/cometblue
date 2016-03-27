@@ -44,6 +44,9 @@ class _JSONFormatter(object):
         json.dump(value, self._stream)
         self._stream.flush()
 
+    def print_datetime(self, value):
+        self._print_any(value.isoformat())
+
     def __getattr__(self, item):
         if item.startswith('print_'):
             return self._print_any
@@ -61,6 +64,9 @@ class _HumanReadableFormatter(object):
     def _print_simple(self, value):
         self._stream.write(value + '\n')
         self._stream.flush()
+
+    def print_datetime(self, value):
+        self._print_simple(value.isoformat(' '))
 
     def __getattr__(self, item):
         if item.startswith('print_'):
@@ -87,6 +93,9 @@ class _ShellVarFormatter(object):
                 _SHELL_VAR_PREFIX + '%s=%s\n' % (
                     name.upper(), shellescape.quote(value)))
         self._stream.flush()
+
+    def print_datetime(self, value):
+        self._print_simple('datetime', value.isoformat())
 
     def __getattr__(self, item):
         if item.startswith('print_'):
@@ -226,9 +235,13 @@ def _add_values():
 
             get_fn = get_fn_with_name('get_' + val_name, 'print_' + val_name)
             get_fn = click.pass_context(get_fn)
+
+            help_text = 'Get %s' % val_conf['description']
+            if val_conf.get('read_requires_pin', False):
+                help_text += ' (requires PIN)'
             get_fn = click.command(
                     val_name,
-                    help='Get %s' % val_conf['description'])(get_fn)
+                    help=help_text)(get_fn)
 
             _device_get.add_command(get_fn)
 

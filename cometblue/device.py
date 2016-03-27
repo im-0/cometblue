@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import datetime
 import functools
 import logging
 import struct
@@ -9,12 +10,23 @@ import six
 
 
 _PIN_STRUCT = '<I'
+_DATETIME_STRUCT = '<BBBBB'
 
 _log = logging.getLogger(__name__)
 
 
 def _encode_pin(pin):
     return struct.pack(_PIN_STRUCT, pin)
+
+
+def _decode_datetime(value):
+    mi, ho, da, mo, ye = struct.unpack(_DATETIME_STRUCT, value)
+    return datetime.datetime(
+            year=ye + 2000,
+            month=mo,
+            day=da,
+            hour=ho,
+            minute=mi)
 
 
 class CometBlue(object):
@@ -49,6 +61,13 @@ class CometBlue(object):
             'decode': str,
         },
 
+        'datetime': {
+            'description': 'time and date',
+            'uuid': '47e9ee01-47e9-11e4-8939-164230d1df67',
+            'read_requires_pin': True,
+            'decode': _decode_datetime,
+        },
+
         'pin': {
             'description': 'PIN',
             'uuid': '47e9ee30-47e9-11e4-8939-164230d1df67',
@@ -56,9 +75,11 @@ class CometBlue(object):
         },
     }
 
-    def _read_value(self, uuid, decode):
+    def _read_value(self, uuid, decode, pin_required):
         if not self._device.is_connected():
             raise RuntimeError('Not connected')
+        if pin_required and (self._pin is None):
+            raise RuntimeError('PIN required')
 
         _log.debug('Reading value "%s" from "%s"...',
                    uuid, self._device_address)
@@ -98,7 +119,8 @@ class CometBlue(object):
                         functools.partial(
                                 self._read_value,
                                 str(val_conf['uuid']),
-                                val_conf['decode']))
+                                val_conf['decode'],
+                                val_conf.get('read_requires_pin', False)))
             if 'encode' in val_conf:
                 setattr(
                         self,
