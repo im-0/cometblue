@@ -104,7 +104,10 @@ class _ShellVarFormatter(object):
         help='Device discovery timeout in seconds')
 @click.pass_context
 def _discover(ctx, timeout):
-    devices = cometblue.discovery.discover(ctx.obj.adapter, timeout)
+    devices = cometblue.discovery.discover(
+            ctx.obj.adapter, timeout,
+            channel_type=ctx.obj.channel_type,
+            security_level=ctx.obj.security_level)
     devices = [dict(name=name, address=address)
                for address, name in six.iteritems(devices)]
     ctx.obj.formatter.print_discovered_devices(devices)
