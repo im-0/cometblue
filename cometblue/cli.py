@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import datetime
 import functools
 import itertools
 import json
@@ -212,6 +213,28 @@ class _SetterFunctions(object):
             real_setter(ctx, int(pin))
 
         return set_pin
+
+    @staticmethod
+    def datetime(real_setter):
+        @click.argument(
+                'dt',
+                default=None,
+                required=False)
+        @click.pass_context
+        def set_datetime(ctx, dt):
+            if dt is None:
+                parsed_dt = datetime.datetime.now()
+            else:
+                try:
+                    parsed_dt = datetime.datetime.strptime(
+                            dt, '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    parsed_dt = datetime.datetime.strptime(
+                            dt, '%Y-%m-%dT%H:%M:%S')
+
+            real_setter(ctx, parsed_dt)
+
+        return set_datetime
 
 
 def _add_values():

@@ -29,6 +29,18 @@ def _decode_datetime(value):
             minute=mi)
 
 
+def _encode_datetime(dt):
+    if dt.year < 2000:
+        raise RuntimeError('Invalid year')
+    return struct.pack(
+            _DATETIME_STRUCT,
+            dt.minute,
+            dt.hour,
+            dt.day,
+            dt.month,
+            dt.year - 2000)
+
+
 class CometBlue(object):
     SUPPORTED_VALUES = {
         'device_name': {
@@ -66,6 +78,7 @@ class CometBlue(object):
             'uuid': '47e9ee01-47e9-11e4-8939-164230d1df67',
             'read_requires_pin': True,
             'decode': _decode_datetime,
+            'encode': _encode_datetime,
         },
 
         'pin': {
