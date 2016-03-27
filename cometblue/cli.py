@@ -256,9 +256,7 @@ def _parse_datetime(datetime_str):
 @click.pass_context
 def _discover(ctx, timeout):
     devices = cometblue.discovery.discover(
-            ctx.obj.adapter, timeout,
-            channel_type=ctx.obj.channel_type,
-            security_level=ctx.obj.security_level)
+            ctx.obj.adapter, timeout)
     devices = [dict(name=name, address=address)
                for address, name in six.iteritems(devices)]
     ctx.obj.formatter.print_discovered_devices(devices)
@@ -272,8 +270,6 @@ def _device_get_days(ctx):
     with cometblue.device.CometBlue(
             ctx.obj.device_address,
             adapter=ctx.obj.adapter,
-            channel_type=ctx.obj.channel_type,
-            security_level=ctx.obj.security_level,
             pin=ctx.obj.pin) as device:
         days = device.get_days()
 
@@ -288,8 +284,6 @@ def _device_get_holidays(ctx):
     with cometblue.device.CometBlue(
             ctx.obj.device_address,
             adapter=ctx.obj.adapter,
-            channel_type=ctx.obj.channel_type,
-            security_level=ctx.obj.security_level,
             pin=ctx.obj.pin) as device:
         holidays = device.get_holidays()
 
@@ -345,8 +339,6 @@ def _device_set_day(ctx, day, period):
     with cometblue.device.CometBlue(
             ctx.obj.device_address,
             adapter=ctx.obj.adapter,
-            channel_type=ctx.obj.channel_type,
-            security_level=ctx.obj.security_level,
             pin=ctx.obj.pin) as device:
         device.set_day(day_index, periods)
 
@@ -379,8 +371,6 @@ def _device_set_holiday(ctx, holiday, start, end, temperature):
     with cometblue.device.CometBlue(
             ctx.obj.device_address,
             adapter=ctx.obj.adapter,
-            channel_type=ctx.obj.channel_type,
-            security_level=ctx.obj.security_level,
             pin=ctx.obj.pin) as device:
         device.set_holiday(holiday_index, holiday_data)
 
@@ -405,8 +395,6 @@ def _device_backup(ctx, file_name):
     with cometblue.device.CometBlue(
             ctx.obj.device_address,
             adapter=ctx.obj.adapter,
-            channel_type=ctx.obj.channel_type,
-            security_level=ctx.obj.security_level,
             pin=ctx.obj.pin) as device:
         backup = device.backup()
 
@@ -453,8 +441,6 @@ def _device_restore(ctx, file_name):
     with cometblue.device.CometBlue(
             ctx.obj.device_address,
             adapter=ctx.obj.adapter,
-            channel_type=ctx.obj.channel_type,
-            security_level=ctx.obj.security_level,
             pin=ctx.obj.pin) as device:
         device.restore(backup)
 
@@ -495,16 +481,6 @@ def _device(ctx, address, pin, pin_file):
         default='hci0',
         help='Bluetooth adapter interface')
 @click.option(
-        '--channel-type', '-c',
-        type=click.Choice(('public', 'random')),
-        show_default=True,
-        default='public')
-@click.option(
-        '--security-level', '-s',
-        type=click.Choice(('low', 'medium', 'high')),
-        show_default=True,
-        default='low')
-@click.option(
         '--formatter', '-f',
         type=click.Choice(('json', 'human-readable', 'shell-var')),
         show_default=True,
@@ -515,12 +491,10 @@ def _device(ctx, address, pin, pin_file):
         show_default=True,
         default='error')
 @click.pass_context
-def _main(ctx, adapter, channel_type, security_level, formatter, log_level):
+def _main(ctx, adapter, formatter, log_level):
     _configure_logger(_get_log_level(log_level))
 
     ctx.obj.adapter = adapter
-    ctx.obj.channel_type = channel_type
-    ctx.obj.security_level = security_level
 
     if formatter == 'json':
         ctx.obj.formatter = _JSONFormatter()
@@ -636,8 +610,6 @@ def _add_values():
                     with cometblue.device.CometBlue(
                             ctx.obj.device_address,
                             adapter=ctx.obj.adapter,
-                            channel_type=ctx.obj.channel_type,
-                            security_level=ctx.obj.security_level,
                             pin=ctx.obj.pin) as device:
                         value = getattr(device, get_fn_name)()
 
@@ -664,8 +636,6 @@ def _add_values():
                     with cometblue.device.CometBlue(
                             ctx.obj.device_address,
                             adapter=ctx.obj.adapter,
-                            channel_type=ctx.obj.channel_type,
-                            security_level=ctx.obj.security_level,
                             pin=ctx.obj.pin) as device:
                         getattr(device, set_fn_name)(value)
 
