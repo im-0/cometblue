@@ -4,7 +4,7 @@
 
 From the software point of view, "Comet Blue" is an BLE (Bluetooth Low Energy) device that implements GATT (Generic Attribute Profile Specification).
 
-This project provides python library and command line tool which may be used to control "Comet Blue" from any linux system equipped with Bluetooth adapter (USB Bluetooth dongle, for example).
+This project provides python library and command line tool which may be used to control "Comet Blue" from any linux system equipped with Bluetooth adapter (USB Bluetooth 4.0 dongle, for example).
 
 ## Installation
 From sources:
