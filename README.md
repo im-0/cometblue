@@ -6,6 +6,8 @@ From the software point of view, "Comet Blue" is an BLE (Bluetooth Low Energy) d
 
 This project provides python library and command line tool which may be used to control "Comet Blue" from any linux system equipped with Bluetooth adapter (USB Bluetooth 4.0 dongle, for example).
 
+This project is fork of https://github.com/im-0/cometblue rewrited with library https://github.com/getsenic/gatt-python
+
 ## Installation
 From sources:
 ```
@@ -29,6 +31,8 @@ Usage: cometblue [OPTIONS] COMMAND [ARGS]...
 
 Options:
   -a, --adapter TEXT              Bluetooth adapter interface  [default: hci0]
+  -p, --poweron                   Power ON/OFF adapter if needed  [default:
+                                  False]
   -f, --formatter [json|human-readable|shell-var]
                                   Output formatter  [default: human-readable]
   -L, --log-level TEXT            [default: error]
@@ -87,12 +91,12 @@ Commands:
   device_name         Get device name
   firmware_revision   Get firmware revision
   firmware_revision2  Get firmware revision #2 (requires PIN)
-  flags               Get flags (requires PIN)
   holidays            Get configured holidays (requires PIN)
   lcd_timer           Get LCD timer (requires PIN)
   manufacturer_name   Get manufacturer name
   model_number        Get model number
   software_revision   Get software revision
+  status              Get status (requires PIN)
   temperatures        Get temperatures (requires PIN)
 ```
 Usage examples:
@@ -137,6 +141,7 @@ Commands:
   holiday       Set period and temperature for holiday...
   lcd_timer     Set LCD timer (requires PIN)
   pin           Set PIN (requires PIN)
+  status        Set status (requires PIN)
   temperatures  Set temperatures (requires PIN)
 ```
 Usage examples:
@@ -215,7 +220,6 @@ Usage example:
 - http://torsten-traenkner.de/wissen/smarthome/heizung.php
 
 ## TODO
-- Support status write
 - Support timer
 - Write tests
 
