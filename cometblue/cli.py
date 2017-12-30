@@ -576,6 +576,38 @@ class _SetterFunctions(object):
         return set_datetime
 
     @staticmethod
+    def status(real_setter):
+
+        @click.option('+c/-c', '--childlock/--no-childlock', 'childlock', is_flag=True, default=None, help='Enable/disable childlock')
+        @click.option('+m/-m', '--manual-mode', '--auto-mode', 'manual_mode', is_flag=True, default=None, help='Enable/disable manual mode')
+        @click.option('+a', '--adapt', 'adapting', is_flag=True, default=None, help='Re-adapt (make sure device is mounted)')
+        @click.pass_context
+        def set_status(ctx, childlock, manual_mode, adapting):
+            keys = ['childlock', 'manual_mode', 'adapting']
+            vals = [childlock, manual_mode, adapting]
+
+            status = {}
+            for i in range(len(keys)):
+                if vals[i] is None:
+                    continue
+                status[keys[i]] = vals[i]
+
+            if not status:
+                raise RuntimeError(
+                        'No status flags to update, try "status -h"')
+
+            if ctx.obj.device._device.is_connected():
+                current = ctx.obj.device.get_status()
+                current = dict((k, v) for k, v in current.items() if k in keys)
+                for k, v in status.items():
+                    current[k] = v
+                status = current
+
+            real_setter(ctx, status)
+
+        return set_status
+
+    @staticmethod
     def temperatures(real_setter):
         @click.option(
                 '--temp-manual', '-m',

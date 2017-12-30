@@ -78,6 +78,23 @@ def _decode_status(value):
     return report
 
 
+def _encode_status(value):
+    status_dword = 0
+    for key, state in value.items():
+        if not state:
+            continue
+
+        if not key in _STATUS_BITMASKS:
+            _log.error('Unknown flag ' + key)
+            continue
+
+        status_dword |= _STATUS_BITMASKS[key]
+
+    value = struct.pack('<I', status_dword)
+    # downcast to 3 bytes
+    return struct.pack(_STATUS_STRUCT_PACKING, *[int(byte) for byte in value[:3]])
+
+
 def _decode_temperatures(value):
     cur_temp, manual_temp, target_low, target_high, offset_temp, \
             window_open_detect, window_open_minutes = struct.unpack(
@@ -348,6 +365,7 @@ class CometBlue(object):
             'uuid': '47e9ee2a-47e9-11e4-8939-164230d1df67',
             'read_requires_pin': True,
             'decode': _decode_status,
+            'encode': _encode_status,
         },
 
         'temperatures': {
