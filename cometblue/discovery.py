@@ -1,3 +1,4 @@
+# vim: tabstop=4 shiftwidth=4 expandtab
 from __future__ import absolute_import
 
 import logging
