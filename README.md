@@ -113,7 +113,7 @@ Temperature for manual mode:    16.0 °C
 Target temperature low:         16.0 °C
 Target temperature high:        21.0 °C
 Offset temperature:     0.0 °C
-Window open detection:  4
+Window open sensitivity:        4 (1 = low, 4 = high, 8 = mid)
 Window open minutes:    10
 
 # cometblue device E0:E5:CF:D6:98:53 get device_name  # no PIN required

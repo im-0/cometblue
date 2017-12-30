@@ -101,7 +101,7 @@ class _HumanReadableFormatter(object):
         text += 'Target temperature low:\t%.01f °C\n' % value['target_temp_l']
         text += 'Target temperature high:\t%.01f °C\n' % value['target_temp_h']
         text += 'Offset temperature:\t%.01f °C\n' % value['offset_temp']
-        text += 'Window open detection:\t%u\n' % value['window_open_detection']
+        text += 'Window open sensitivity:\t%u (1 = low, 4 = high, 8 = mid)\n' % value['window_open_detection']
         text += 'Window open minutes:\t%u\n' % value['window_open_minutes']
         self._stream.write(text)
         self._stream.flush()
@@ -658,7 +658,7 @@ class _SetterFunctions(object):
                 '--window-open-detect', '-w',
                 type=int,
                 default=None,
-                help='Window open detection')
+                help='Window open sensitivity (1 = low, 4 = high, 8 = mid)')
         @click.option(
                 '--window-open-minutes', '-W',
                 type=int,
