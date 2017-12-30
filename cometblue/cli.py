@@ -520,6 +520,12 @@ def _device(ctx, address, pin, pin_file):
         default='hci0',
         help='Bluetooth adapter interface')
 @click.option(
+        '--poweron', '-p',
+        show_default=True,
+        default=False,
+        is_flag=True,
+        help='Power ON/OFF adapter if needed')
+@click.option(
         '--formatter', '-f',
         type=click.Choice(('json', 'human-readable', 'shell-var')),
         show_default=True,
@@ -530,11 +536,30 @@ def _device(ctx, address, pin, pin_file):
         show_default=True,
         default='error')
 @click.pass_context
-def _main(ctx, adapter, formatter, log_level):
+def _main(ctx, adapter, poweron, formatter, log_level):
     _configure_logger(_get_log_level(log_level))
 
     manager = gatt.DeviceManager(adapter_name = str(adapter))
+
+    class power_manager(object):
+        def __init__(self, manager, poweron_mgmt):
+            self._manager = manager
+            self._poweron_mgmt = poweron_mgmt and not manager.is_adapter_powered
+            if not self._poweron_mgmt:
+                return
+
+            _log.debug('Powering on bluetooth adapter %s' % (self._manager.adapter_name))
+            self._manager.is_adapter_powered = True
+
+        def __call__(self):
+            if not self._poweron_mgmt:
+                return
+
+            _log.debug('Shutting down bluetooth adapter %s' % (self._manager.adapter_name))
+            self._manager.is_adapter_powered = False
+
     ctx.obj.manager = manager
+    ctx.call_on_close(power_manager(ctx.obj.manager, poweron))
 
     if formatter == 'json':
         ctx.obj.formatter = _JSONFormatter()
