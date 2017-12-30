@@ -320,11 +320,11 @@ class CometBlue(object):
             'encode': _encode_datetime,
         },
 
-        'flags': {
-            'description': 'flags',
+        'status': {
+            'description': 'status',
             'uuid': '47e9ee2a-47e9-11e4-8939-164230d1df67',
             'read_requires_pin': True,
-            'decode': _decode_flags,
+            'decode': _decode_status,
         },
 
         'temperatures': {

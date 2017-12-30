@@ -104,6 +104,22 @@ class _HumanReadableFormatter(object):
         self._stream.write(text)
         self._stream.flush()
 
+    def print_status(self, value):
+        text = ''
+        text += 'Temperature satisfied:\t%r\n' % value['satisfied']
+        text += 'Child-lock:\t%r\n' % value['childlock']
+        text += 'Manual mode is:\t%r\n' % value['manual_mode']
+        text += 'Adapting:\t%r\n' % value['adapting']
+        text += 'Not ready:\t%r\n' % value['not_ready']
+        text += 'Motor moving:\t%r\n' % value['motor_moving']
+        text += 'Install procedure running:\t%r\n' % value['installing']
+        text += 'Antifrost active:\t%r\n' % value['antifrost_activated']
+        text += 'Low battery alert:\t%r\n' % value['low_battery']
+        text += 'State dword:\t0x%08X\n' % value['state_as_dword']
+        text += 'Unknown state:\t0x%08X\n' % value['unused_bits']
+        self._stream.write(text)
+        self._stream.flush()
+
     def print_lcd_timer(self, value):
         self._print_simple('%02u:%02u' % (value['preload'], value['current']))
 

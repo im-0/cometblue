@@ -214,7 +214,7 @@ Usage example:
 - http://torsten-traenkner.de/wissen/smarthome/heizung.php
 
 ## TODO
-- Support flags
+- Support status write
 - Support timer
 - Write tests
 - Python3
