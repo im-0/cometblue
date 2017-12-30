@@ -305,7 +305,8 @@ def _device_get_holidays(ctx):
 
 @click.group(
         'get',
-        help='Get value')
+        help='Get value',
+        chain=True)
 def _device_get():
     pass
 
@@ -393,7 +394,8 @@ def _device_set_holiday(ctx, holiday, start, end, temperature):
 
 @click.group(
         'set',
-        help='Set value (always requires PIN)')
+        help='Set value (always requires PIN)',
+        chain=True)
 def _device_set():
     pass
 
@@ -457,7 +459,9 @@ def _device_restore(ctx, file_name):
 
 @click.group(
         'device',
-        help='Get or set values')
+        short_help='Get or set values'
+        #, chain=True
+        )
 @click.option(
         '--pin', '-p',
         default=None,
