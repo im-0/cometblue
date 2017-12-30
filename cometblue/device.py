@@ -118,6 +118,10 @@ def _encode_temperatures(temps):
             _temp_int_to_int(temps, 'window_open_minutes'))
 
 
+def _decode_str(value):
+    return value.decode()
+
+
 def _decode_battery(value):
     value = struct.unpack(_BATTERY_STRUCT_PACKING, value)[0]
     if value == 255:
@@ -140,13 +144,31 @@ def _encode_lcd_timer(lcd_timer):
             0)
 
 
-def _day_period_cmp(p1, p2):
-    if p1['start'] is None:
-        return 1
-    if p2['start'] is None:
-        return -1
-    return cmp(p1['start'], p2['start'])
+class _day_period_cmp(object):
+    def __init__(self, period):
+        self.period = period
 
+    def __lt__(self, other):
+        if self.period['start'] is None:
+            return False
+        if other.period['start'] is None:
+            return True
+        return self.period['start'] < other.period['start']
+
+    def __gt__(self, other):
+        return other < self
+
+    def __eq__(self, other):
+        return self.period['start'] == other.period['start']
+
+    def __le__(self, other):
+        return self == other or self < other
+
+    def __ge__(self, other):
+        return self == toher or self > other
+
+    def __ne__(self, other):
+        return not self == other
 
 def _decode_day(value):
     max_raw_time = ((23 * 60) + 59) / 10
@@ -165,14 +187,14 @@ def _decode_day(value):
                 start = datetime.time()
             else:
                 raw_start *= 10
-                start = datetime.time(hour=raw_start / 60,
+                start = datetime.time(hour=raw_start // 60,
                                       minute=raw_start % 60)
 
             if raw_end > max_raw_time:
                 end = datetime.time(23, 59, 59)
             else:
                 raw_end *= 10
-                end = datetime.time(hour=raw_end / 60,
+                end = datetime.time(hour=raw_end // 60,
                                     minute=raw_end % 60)
 
         if start == end:
@@ -186,7 +208,7 @@ def _decode_day(value):
                 'end': end,
             })
 
-    day.sort(_day_period_cmp)
+    day.sort(key=_day_period_cmp)
 
     return day
 
@@ -203,8 +225,8 @@ def _encode_day(periods):
             start = 255
             end = 255
         else:
-            start = (period['start'].hour * 60 + period['start'].minute) / 10
-            end = (period['end'].hour * 60 + period['end'].minute) / 10
+            start = (period['start'].hour * 60 + period['start'].minute) // 10
+            end = (period['end'].hour * 60 + period['end'].minute) // 10
 
         if start == 0:
             start = 255
@@ -285,31 +307,31 @@ class CometBlue(object):
         'device_name': {
             'description': 'device name',
             'uuid': '00002a00-0000-1000-8000-00805f9b34fb',
-            'decode': str,
+            'decode': _decode_str,
         },
 
         'model_number': {
             'description': 'model number',
             'uuid': '00002a24-0000-1000-8000-00805f9b34fb',
-            'decode': str,
+            'decode': _decode_str,
         },
 
         'firmware_revision': {
             'description': 'firmware revision',
             'uuid': '00002a26-0000-1000-8000-00805f9b34fb',
-            'decode': str,
+            'decode': _decode_str,
         },
 
         'software_revision': {
             'description': 'software revision',
             'uuid': '00002a28-0000-1000-8000-00805f9b34fb',
-            'decode': str,
+            'decode': _decode_str,
         },
 
         'manufacturer_name': {
             'description': 'manufacturer name',
             'uuid': '00002a29-0000-1000-8000-00805f9b34fb',
-            'decode': str,
+            'decode': _decode_str,
         },
 
         'datetime': {
@@ -346,7 +368,7 @@ class CometBlue(object):
             'description': 'firmware revision #2',
             'uuid': '47e9ee2d-47e9-11e4-8939-164230d1df67',
             'read_requires_pin': True,
-            'decode': str,
+            'decode': _decode_str,
         },
 
         'lcd_timer': {

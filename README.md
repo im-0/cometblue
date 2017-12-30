@@ -10,13 +10,14 @@ This project provides python library and command line tool which may be used to 
 From sources:
 ```
 # Install dependencies
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 # Install cometblue
-python setup.py install
+python3 setup.py install
 ```
-Using *pip*:
+Using *pip* (unsupported):
+(currently only original project, this fork is unsupported)
 ```
-pip install cometblue
+pip3 install cometblue
 ```
 
 ## Command line tool
@@ -217,7 +218,6 @@ Usage example:
 - Support status write
 - Support timer
 - Write tests
-- Python3
 
 ## Notes
 Tool and library may not work as expected because it is not well tested. Patches and bugreports are always welcome.
