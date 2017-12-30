@@ -17,10 +17,9 @@ _SUPPORTED_DEVICES = (
 _log = logging.getLogger(__name__)
 
 
-def discover(adapter='hci0', timeout=10):
+def discover(manager, timeout=10):
     _log.info('Starting discovery on adapter "%s" with %u seconds timeout...',
-              adapter, timeout)
-    manager = gatt.DeviceManager(adapter)
+              manager.adapter_name, timeout)
 
     manager.start_discovery()
     time.sleep(timeout)
@@ -35,9 +34,7 @@ def discover(adapter='hci0', timeout=10):
         name = _device.alias()
         address = _device.mac_address
         try:
-            with cometblue.device.CometBlue(
-                    address,
-                    adapter=adapter) as device:
+            with cometblue.device.CometBlue(_device, None) as device:
                 manufacturer_name = device.get_manufacturer_name().lower()
                 model_number = device.get_model_number().lower()
 

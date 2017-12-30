@@ -462,10 +462,13 @@ class CometBlue(object):
             raise RuntimeError('Invalid table row number')
         return self._write_value(_increase_uuid(uuid, n), encode, value)
 
-    def __init__(self, address, adapter='hci0', pin=None):
-        self._device = gatt.Device(address, gatt.DeviceManager(adapter))
+    def __init__(self, gattDevice, pin=None):
+        self._device = gattDevice
         self._chars = None
         self._pin = pin
+        # for manual connect + disconnect vs. __enter__ vs. __exit__
+        self._entered = False
+        self._locked = False
 
         for val_name, val_conf in six.iteritems(self.SUPPORTED_VALUES):
             if 'decode' in val_conf:
@@ -515,7 +518,7 @@ class CometBlue(object):
             + ", " \
             + ("services resolved" if self._device.is_services_resolved() else "pending service resolution") + "]"
 
-    def __enter__(self):
+    def _connect(self):
         _log.info('Connecting to device "%s"...', self._device.mac_address)
         self._device.connect()
 
@@ -549,9 +552,26 @@ class CometBlue(object):
                 raise RuntimeError('Invalid PIN', exc)
 
         _log.info('Connected to device "%s"', self._device.mac_address)
+        self._entered = True
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __enter__(self):
+        if not self._entered:
+            self._connect()
+
+        return self
+
+    def manual_connect(self):
+        if not self._entered:
+            self._connect()
+        self._locked = True
+
+    def _disconnect(self):
+        if not self._entered:
+            return
+
+        self._entered = False
+
         if not self._device.is_connected():
             return
 
@@ -561,6 +581,15 @@ class CometBlue(object):
             _log.info('Disconnected from device "%s"', self._device.mac_address)
         except:
             _log.error('Failed disconnect from device "%s", considering disconnected anyway', self._device.mac_address)
+
+    def manual_disconnect(self):
+        if self._locked:
+            self._disconnect()
+        self._locked = False
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if not self._locked:
+            self._disconnect()
 
     def get_days(self):
         return list(map(self.get_day, range(7)))

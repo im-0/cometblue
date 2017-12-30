@@ -275,8 +275,7 @@ def _parse_datetime(datetime_str):
         help='Device discovery timeout in seconds')
 @click.pass_context
 def _discover(ctx, timeout):
-    devices = cometblue.discovery.discover(
-            ctx.obj.adapter, timeout)
+    devices = cometblue.discovery.discover(ctx.obj.manager, timeout)
     devices = [dict(name=name, address=address)
                for address, name in six.iteritems(devices)]
     ctx.obj.formatter.print_discovered_devices(devices)
@@ -287,10 +286,7 @@ def _discover(ctx, timeout):
         help='Get configured periods per days of the week (requires PIN)')
 @click.pass_context
 def _device_get_days(ctx):
-    with cometblue.device.CometBlue(
-            ctx.obj.device_address,
-            adapter=ctx.obj.adapter,
-            pin=ctx.obj.pin) as device:
+    with ctx.obj.device as device:
         days = device.get_days()
 
     ctx.obj.formatter.print_days(days)
@@ -301,10 +297,7 @@ def _device_get_days(ctx):
         help='Get configured holidays (requires PIN)')
 @click.pass_context
 def _device_get_holidays(ctx):
-    with cometblue.device.CometBlue(
-            ctx.obj.device_address,
-            adapter=ctx.obj.adapter,
-            pin=ctx.obj.pin) as device:
+    with ctx.obj.device as device:
         holidays = device.get_holidays()
 
     ctx.obj.formatter.print_holidays(holidays)
@@ -356,10 +349,7 @@ def _device_set_day(ctx, day, period):
 
         periods.append(dict(start=start, end=end))
 
-    with cometblue.device.CometBlue(
-            ctx.obj.device_address,
-            adapter=ctx.obj.adapter,
-            pin=ctx.obj.pin) as device:
+    with ctx.obj.device as device:
         device.set_day(day_index, periods)
 
 
@@ -397,10 +387,7 @@ def _device_set_holiday(ctx, holiday, start, end, temperature):
         'temp': temperature,
     }
 
-    with cometblue.device.CometBlue(
-            ctx.obj.device_address,
-            adapter=ctx.obj.adapter,
-            pin=ctx.obj.pin) as device:
+    with ctx.obj.device as device:
         device.set_holiday(holiday_index, holiday_data)
 
 
@@ -421,10 +408,7 @@ def _device_set():
         required=False)
 @click.pass_context
 def _device_backup(ctx, file_name):
-    with cometblue.device.CometBlue(
-            ctx.obj.device_address,
-            adapter=ctx.obj.adapter,
-            pin=ctx.obj.pin) as device:
+    with ctx.obj.device as device:
         backup = device.backup()
 
     if file_name is None:
@@ -467,10 +451,7 @@ def _device_restore(ctx, file_name):
             for holiday in backup['holidays']
         ]
 
-    with cometblue.device.CometBlue(
-            ctx.obj.device_address,
-            adapter=ctx.obj.adapter,
-            pin=ctx.obj.pin) as device:
+    with ctx.obj.device as device:
         device.restore(backup)
 
 
@@ -490,7 +471,25 @@ def _device_restore(ctx, file_name):
         required=True)
 @click.pass_context
 def _device(ctx, address, pin, pin_file):
-    ctx.obj.device_address = address
+    '''
+    Get or set values.
+
+    You may use address 00:00:00:00:00:00 to access subcommand help without a real device.
+    '''
+
+    class connection_manager(object):
+        def __init__(self, device):
+            self._device = device
+            if self._device is None:
+                return
+
+            device.manual_connect()
+
+        def __call__(self):
+            if self._device is None:
+                return
+
+            self._device.manual_disconnect()
 
     if pin_file is not None:
         with open(pin_file, 'r') as pin_file:
@@ -500,6 +499,13 @@ def _device(ctx, address, pin, pin_file):
     else:
         ctx.obj.pin = None
 
+    ctx.obj.device_address = address
+    ctx.obj.device = None
+    if address != "00:00:00:00:00:00":
+        gattdevice = gatt.Device(ctx.obj.device_address, ctx.obj.manager)
+        ctx.obj.device = cometblue.device.CometBlue(gattdevice, ctx.obj.pin)
+
+    ctx.call_on_close(connection_manager(ctx.obj.device))
 
 @click.group(
         context_settings={'help_option_names': ['-h', '--help']},
@@ -523,7 +529,8 @@ def _device(ctx, address, pin, pin_file):
 def _main(ctx, adapter, formatter, log_level):
     _configure_logger(_get_log_level(log_level))
 
-    ctx.obj.adapter = adapter
+    manager = gatt.DeviceManager(adapter_name = str(adapter))
+    ctx.obj.manager = manager
 
     if formatter == 'json':
         ctx.obj.formatter = _JSONFormatter()
@@ -636,10 +643,7 @@ def _enroll_subcommands():
         if 'decode' in val_conf:
             def get_fn_with_name(get_fn_name, print_fn_name):
                 def real_get_fn(ctx):
-                    with cometblue.device.CometBlue(
-                            ctx.obj.device_address,
-                            adapter=ctx.obj.adapter,
-                            pin=ctx.obj.pin) as device:
+                    with ctx.obj.device as device:
                         value = getattr(device, get_fn_name)()
 
                     print_fn = getattr(ctx.obj.formatter, print_fn_name)
@@ -662,10 +666,7 @@ def _enroll_subcommands():
         if 'encode' in val_conf:
             def set_fn_with_name(set_fn_name):
                 def real_set_fn(ctx, value):
-                    with cometblue.device.CometBlue(
-                            ctx.obj.device_address,
-                            adapter=ctx.obj.adapter,
-                            pin=ctx.obj.pin) as device:
+                    with ctx.obj.device as device:
                         getattr(device, set_fn_name)(value)
 
                 return real_set_fn
