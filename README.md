@@ -103,13 +103,13 @@ Usage examples:
 2016-03-27 18:32:00
 
 # cometblue device -p 0 E0:E5:CF:D6:98:53 get temperatures
-Current temperature: 23.0 °C
-Temperature for manual mode: 16.0 °C
-Target temperature low: 16.0 °C
-Target temperature high: 21.0 °C
-Offset temperature: 0.0 °C
-Window open detection: 4
-Window open minutes: 10
+Current temperature:    23.0 °C
+Temperature for manual mode:    16.0 °C
+Target temperature low:         16.0 °C
+Target temperature high:        21.0 °C
+Offset temperature:     0.0 °C
+Window open detection:  4
+Window open minutes:    10
 
 # cometblue device E0:E5:CF:D6:98:53 get device_name  # no PIN required
 Comet Blue

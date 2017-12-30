@@ -12,23 +12,24 @@ import gattlib
 import six
 
 
-_PIN_STRUCT = '<I'
-_DATETIME_STRUCT = '<BBBBB'
-_FLAGS_STRUCT = '<BBB'
-_TEMPERATURES_STRUCT = '<bbbbbbb'
-_LCD_TIMER_STRUCT = '<BB'
-_DAY_STRUCT = '<BBBBBBBB'
-_HOLIDAY_STRUCT = '<BBBBBBBBb'
+_PIN_STRUCT_PACKING = '<I'
+_BATTERY_STRUCT_PACKING = '<B'
+_DATETIME_STRUCT_PACKING = '<BBBBB'
+_STATUS_STRUCT_PACKING = '<BBB'
+_TEMPERATURES_STRUCT_PACKING = '<bbbbbbb'
+_LCD_TIMER_STRUCT_PACKING = '<BB'
+_DAY_STRUCT_PACKING = '<BBBBBBBB'
+_HOLIDAY_STRUCT_PACKING = '<BBBBBBBBb'
 
 _log = logging.getLogger(__name__)
 
 
 def _encode_pin(pin):
-    return struct.pack(_PIN_STRUCT, pin)
+    return struct.pack(_PIN_STRUCT_PACKING, pin)
 
 
 def _decode_datetime(value):
-    mi, ho, da, mo, ye = struct.unpack(_DATETIME_STRUCT, value)
+    mi, ho, da, mo, ye = struct.unpack(_DATETIME_STRUCT_PACKING, value)
     return datetime.datetime(
             year=ye + 2000,
             month=mo,
@@ -41,23 +42,45 @@ def _encode_datetime(dt):
     if dt.year < 2000:
         raise RuntimeError('Invalid year')
     return struct.pack(
-            _DATETIME_STRUCT,
+            _DATETIME_STRUCT_PACKING,
             dt.minute,
             dt.hour,
             dt.day,
             dt.month,
             dt.year - 2000)
 
+_STATUS_BITMASKS = {
+    'childlock': 0x80,
+    'manual_mode': 0x1,
+    'adapting': 0x400,
+    'not_ready': 0x200,
+    'installing': 0x400 | 0x200 | 0x100,
+    'motor_moving': 0x100,
+    'antifrost_activated': 0x10,
+    'satisfied': 0x80000,
+    'low_battery': 0x800
+}
 
-def _decode_flags(value):
-    f1, f2, f3 = struct.unpack(_FLAGS_STRUCT, value)
-    return '%s %s %s' % tuple(map(bin, (f1, f2, f3)))
+def _decode_status(value):
+    state_bytes = struct.unpack(_STATUS_STRUCT_PACKING, value)
+    state_dword = struct.unpack('<I', value + b'\x00')[0]
+
+    report = {}
+    masked_out = 0
+    for key, mask in _STATUS_BITMASKS.items():
+        report[key] = bool(state_dword & mask == mask)
+        masked_out |= mask
+
+    report['state_as_dword'] = state_dword
+    report['unused_bits'] = state_dword & ~masked_out
+
+    return report
 
 
 def _decode_temperatures(value):
     cur_temp, manual_temp, target_low, target_high, offset_temp, \
             window_open_detect, window_open_minutes = struct.unpack(
-                    _TEMPERATURES_STRUCT, value)
+                    _TEMPERATURES_STRUCT_PACKING, value)
     return {
         'current_temp': cur_temp / 2.0,
         'manual_temp': manual_temp / 2.0,
@@ -85,7 +108,7 @@ def _temp_int_to_int(temps_dict, var_name):
 
 def _encode_temperatures(temps):
     return struct.pack(
-            _TEMPERATURES_STRUCT,
+            _TEMPERATURES_STRUCT_PACKING,
             -128,  # current_temp
             _temp_float_to_int(temps, 'manual_temp'),
             _temp_float_to_int(temps, 'target_temp_l'),
@@ -96,14 +119,14 @@ def _encode_temperatures(temps):
 
 
 def _decode_battery(value):
-    value = ord(value)
+    value = struct.unpack(_BATTERY_STRUCT_PACKING, value)[0]
     if value == 255:
         return None
     return value
 
 
 def _decode_lcd_timer(value):
-    preload, current = struct.unpack(_LCD_TIMER_STRUCT, value)
+    preload, current = struct.unpack(_LCD_TIMER_STRUCT_PACKING, value)
     return {
         'preload': preload,
         'current': current,
@@ -112,7 +135,7 @@ def _decode_lcd_timer(value):
 
 def _encode_lcd_timer(lcd_timer):
     return struct.pack(
-            _LCD_TIMER_STRUCT,
+            _LCD_TIMER_STRUCT_PACKING,
             lcd_timer['preload'],
             0)
 
@@ -128,7 +151,7 @@ def _day_period_cmp(p1, p2):
 def _decode_day(value):
     max_raw_time = ((23 * 60) + 59) / 10
 
-    raw_time_values = list(struct.unpack(_DAY_STRUCT, value))
+    raw_time_values = list(struct.unpack(_DAY_STRUCT_PACKING, value))
     day = []
     while raw_time_values:
         raw_start = raw_time_values.pop(0)
@@ -191,13 +214,13 @@ def _encode_day(periods):
         values.append(start)
         values.append(end)
 
-    return struct.pack(_DAY_STRUCT, *values)
+    return struct.pack(_DAY_STRUCT_PACKING, *values)
 
 
 def _decode_holiday(value):
     ho_start, da_start, mo_start, ye_start, \
             ho_end, da_end, mo_end, ye_end, \
-            temp = struct.unpack(_HOLIDAY_STRUCT, value)
+            temp = struct.unpack(_HOLIDAY_STRUCT_PACKING, value)
 
     if (ho_start > 23) or (ho_end > 23) \
             or (da_start > 31) or (da_end > 31) \
@@ -231,14 +254,14 @@ def _decode_holiday(value):
 
 def _encode_holiday(holiday):
     if any(map(lambda v: v is None, six.itervalues(holiday))):
-        return struct.pack(_HOLIDAY_STRUCT,
+        return struct.pack(_HOLIDAY_STRUCT_PACKING,
                            128, 128, 128, 128, 128, 128, 128, 128, -128)
 
     if (holiday['start'].year < 2000) or (holiday['end'].year < 2000):
         raise RuntimeError('Invalid year')
 
     return struct.pack(
-            _HOLIDAY_STRUCT,
+            _HOLIDAY_STRUCT_PACKING,
             holiday['start'].hour,
             holiday['start'].day,
             holiday['start'].month,

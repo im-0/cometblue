@@ -94,13 +94,13 @@ class _HumanReadableFormatter(object):
 
     def print_temperatures(self, value):
         text = ''
-        text += 'Current temperature: %.01f °C\n' % value['current_temp']
-        text += 'Temperature for manual mode: %.01f °C\n' % value['manual_temp']
-        text += 'Target temperature low: %.01f °C\n' % value['target_temp_l']
-        text += 'Target temperature high: %.01f °C\n' % value['target_temp_h']
-        text += 'Offset temperature: %.01f °C\n' % value['offset_temp']
-        text += 'Window open detection: %u\n' % value['window_open_detection']
-        text += 'Window open minutes: %u\n' % value['window_open_minutes']
+        text += 'Current temperature:\t%.01f °C\n' % value['current_temp']
+        text += 'Temperature for manual mode:\t%.01f °C\n' % value['manual_temp']
+        text += 'Target temperature low:\t%.01f °C\n' % value['target_temp_l']
+        text += 'Target temperature high:\t%.01f °C\n' % value['target_temp_h']
+        text += 'Offset temperature:\t%.01f °C\n' % value['offset_temp']
+        text += 'Window open detection:\t%u\n' % value['window_open_detection']
+        text += 'Window open minutes:\t%u\n' % value['window_open_minutes']
         self._stream.write(text)
         self._stream.flush()
 
@@ -247,7 +247,8 @@ def _parse_datetime(datetime_str):
 
 @click.command(
         'discover',
-        help='Discover "Comet Blue" Bluetooth LE devices')
+        help='Discover "Comet Blue" Bluetooth LE devices (might take a while)',
+        short_help='Scan for devices (might take a while)')
 @click.option(
         '--timeout', '-t',
         type=int,
@@ -611,7 +612,7 @@ class _SetterFunctions(object):
         return set_lcd_timer
 
 
-def _add_values():
+def _enroll_subcommands():
     for val_name, val_conf in six.iteritems(
             cometblue.device.CometBlue.SUPPORTED_VALUES):
         if 'decode' in val_conf:
@@ -661,10 +662,10 @@ def _add_values():
             _device_set.add_command(set_fn)
 
 
-def main():
+def _init_command_processing():
     _configure_logger()
 
-    _add_values()
+    _enroll_subcommands()
 
     _main.add_command(_discover)
     _main.add_command(_device)
@@ -680,8 +681,24 @@ def main():
     _device_set.add_command(_device_set_day)
     _device_set.add_command(_device_set_holiday)
 
-    return _main(obj=_ContextObj())
+    context = _ContextObj()
+    return context
 
+def cli_main(argv):
+    context = _init_command_processing()
+
+    rv = 0
+    try:
+        rv = _main(obj=context, args=argv)
+    except RuntimeError as err:
+        print(str(err), file=sys.stderr)
+        rv = -1
+    except SystemExit:
+        pass
+    return rv
+
+def main():
+    return cli_main(sys.argv[1:])
 
 if __name__ == '__main__':
     exit(main())
