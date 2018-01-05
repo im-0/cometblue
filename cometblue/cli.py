@@ -295,15 +295,32 @@ def _queue_cleanup(ctx, *cmdargs):
         help='Device discovery timeout in seconds')
 @click.pass_context
 def _discover(ctx, timeout):
-    def _discover_command(manager, timeout, formatter):
-        devices = cometblue.discovery.discover(manager, timeout)
-        devices = [dict(name=name, address=address)
-               for address, name in six.iteritems(devices)]
-            formatter.print_discovered_devices(devices)
+    # this duplicates functionality of discovery.discover(), yet for convinience implemented as series of commands
+
+    filtered_devices = {}
+
+    def _probe_command(device, filtered_devices):
+        device_entry = cometblue.discovery.probe_candidate(device)
+        if not device_entry is None:
+            filtered_devices.update(dict([device_entry]))
+        return 0
+
+    def _discovery_results_command(filtered_devices, formatter):
+        devices = [dict(name=name, address=address) for address, name in six.iteritems(filtered_devices)]
+        formatter.print_discovered_devices(devices)
+        return 0
+
+    def _discover_command(manager, timeout, filtered_devices):
         _log.info('Starting discovery on adapter "%s" with %u seconds timeout...',
                       manager.adapter_name, timeout)
+
+        devices = cometblue.discovery.discover_candidates(manager, timeout)
+        for device in devices:
+            _inject_command(ctx, _probe_command, device, filtered_devices)
         return 0
-    _queue_command(ctx, _discover_command, ctx.obj.manager, timeout, ctx.obj.formatter)
+
+    _queue_command(ctx, _discover_command, ctx.obj.manager, timeout, filtered_devices)
+    _queue_command(ctx, _discovery_results_command, filtered_devices, ctx.obj.formatter)
 
 
 @click.command(
