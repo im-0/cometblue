@@ -20,6 +20,9 @@ import tabulate
 import cometblue.device
 import cometblue.discovery
 
+import threading
+from collections import deque
+
 
 _SHELL_VAR_PREFIX = 'COMETBLUE_'
 _WEEK_DAYS = ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')
@@ -263,6 +266,23 @@ def _parse_datetime(datetime_str):
                 datetime_str, '%Y-%m-%dT%H:%M:%S')
 
 
+class Command(object):
+    def __init__(self, routine, *args):
+        self._routine = routine
+        self._args = args
+
+    def __call__(self):
+        return self._routine(*self._args)
+
+
+def _queue_command(ctx, *cmdargs):
+    ctx.obj.commands.append(Command(*cmdargs))
+def _inject_command(ctx, *cmdargs):
+    ctx.obj.commands.appendleft(Command(*cmdargs))
+def _queue_cleanup(ctx, *cmdargs):
+    ctx.obj.cleanup.append(Command(*cmdargs))
+
+
 @click.command(
         'discover',
         help='Discover "Comet Blue" Bluetooth LE devices (might take a while)',
@@ -275,10 +295,15 @@ def _parse_datetime(datetime_str):
         help='Device discovery timeout in seconds')
 @click.pass_context
 def _discover(ctx, timeout):
-    devices = cometblue.discovery.discover(ctx.obj.manager, timeout)
-    devices = [dict(name=name, address=address)
+    def _discover_command(manager, timeout, formatter):
+        devices = cometblue.discovery.discover(manager, timeout)
+        devices = [dict(name=name, address=address)
                for address, name in six.iteritems(devices)]
-    ctx.obj.formatter.print_discovered_devices(devices)
+            formatter.print_discovered_devices(devices)
+        _log.info('Starting discovery on adapter "%s" with %u seconds timeout...',
+                      manager.adapter_name, timeout)
+        return 0
+    _queue_command(ctx, _discover_command, ctx.obj.manager, timeout, ctx.obj.formatter)
 
 
 @click.command(
@@ -286,10 +311,12 @@ def _discover(ctx, timeout):
         help='Get configured periods per days of the week (requires PIN)')
 @click.pass_context
 def _device_get_days(ctx):
-    with ctx.obj.device as device:
+    def _device_get_days_command(device):
         days = device.get_days()
 
-    ctx.obj.formatter.print_days(days)
+        ctx.obj.formatter.print_days(days)
+        return 0
+    _queue_command(ctx, _device_get_days_command, ctx.obj.device)
 
 
 @click.command(
@@ -297,10 +324,12 @@ def _device_get_days(ctx):
         help='Get configured holidays (requires PIN)')
 @click.pass_context
 def _device_get_holidays(ctx):
-    with ctx.obj.device as device:
+    def _device_get_holidays_command(device):
         holidays = device.get_holidays()
 
-    ctx.obj.formatter.print_holidays(holidays)
+        ctx.obj.formatter.print_holidays(holidays)
+        return 0
+    _queue_command(ctx, _device_get_holidays_command, ctx.obj.device)
 
 
 @click.group(
@@ -322,36 +351,39 @@ def _device_get():
         nargs=-1)
 @click.pass_context
 def _device_set_day(ctx, day, period):
-    try:
-        day_index = int(day) - 1
-    except ValueError:
-        day_index = None
-        for day_n, day_name in zip(itertools.count(), _WEEK_DAYS):
-            if day.lower().startswith(day_name):
-                day_index = day_n
-                break
-        if day_index is None:
-            raise RuntimeError('Unknown day: "%s"' % day)
+    def _device_set_day_command(device, day, period):
+        try:
+            day_index = int(day) - 1
+        except ValueError:
+            day_index = None
+            for day_n, day_name in zip(itertools.count(), _WEEK_DAYS):
+                if day.lower().startswith(day_name):
+                    day_index = day_n
+                    break
+            if day_index is None:
+                raise RuntimeError('Unknown day: "%s"' % day)
 
-    periods = []
-    for one_period in period:
-        str_start, str_end = tuple(map(lambda s: s.strip(),
-                                       one_period.split('-')))
+        periods = []
+        for one_period in period:
+            str_start, str_end = tuple(map(lambda s: s.strip(),
+                                           one_period.split('-')))
 
-        if str_start:
-            start = _parse_time(str_start)
-        else:
-            start = datetime.time()
+            if str_start:
+                start = _parse_time(str_start)
+            else:
+                start = datetime.time()
 
-        if str_end:
-            end = _parse_time(str_end)
-        else:
-            end = datetime.time(23, 59, 59)
+            if str_end:
+                end = _parse_time(str_end)
+            else:
+                end = datetime.time(23, 59, 59)
 
-        periods.append(dict(start=start, end=end))
+            periods.append(dict(start=start, end=end))
 
-    with ctx.obj.device as device:
         device.set_day(day_index, periods)
+
+        return 0
+    _queue_command(ctx, _device_set_day_command, ctx.obj.device, day, period)
 
 
 @click.command(
@@ -375,21 +407,23 @@ def _device_set_day(ctx, day, period):
         default=None)
 @click.pass_context
 def _device_set_holiday(ctx, holiday, start, end, temperature):
-    holiday_index = int(holiday) - 1
+    def _device_set_holiday_command(device, holiday, start, end, temperature):
+        holiday_index = int(holiday) - 1
 
-    if any(map(lambda v: v is None, (start, end, temperature))):
-        start = None
-        end = None
-        temperature = None
+        if any(map(lambda v: v is None, (start, end, temperature))):
+            start = None
+            end = None
+            temperature = None
 
-    holiday_data = {
-        'start': _parse_datetime(start),
-        'end': _parse_datetime(end),
-        'temp': temperature,
-    }
+        holiday_data = {
+            'start': _parse_datetime(start),
+            'end': _parse_datetime(end),
+            'temp': temperature,
+        }
 
-    with ctx.obj.device as device:
         device.set_holiday(holiday_index, holiday_data)
+        return 0
+    _queue_command(ctx, __device_set_holiday_command, ctx.obj.device, holiday, start, end, temperature)
 
 
 @click.group(
@@ -410,15 +444,17 @@ def _device_set():
         required=False)
 @click.pass_context
 def _device_backup(ctx, file_name):
-    with ctx.obj.device as device:
+    def _device_backup_command(device, file_name):
         backup = device.backup()
 
-    if file_name is None:
-        json.dump(backup, sys.stdout, default=_json_default_serializer)
-        sys.stdout.flush()
-    else:
-        with open(file_name, 'w') as backup_file:
-            json.dump(backup, backup_file, default=_json_default_serializer)
+        if file_name is None:
+            json.dump(backup, sys.stdout, default=_json_default_serializer)
+            sys.stdout.flush()
+        else:
+            with open(file_name, 'w') as backup_file:
+                json.dump(backup, backup_file, default=_json_default_serializer)
+        return 0
+    _queue_command(ctx, _device_backup_command, ctx.obj.device, file_name)
 
 
 @click.command(
@@ -431,30 +467,33 @@ def _device_backup(ctx, file_name):
         required=False)
 @click.pass_context
 def _device_restore(ctx, file_name):
-    if file_name is None:
-        backup = json.load(sys.stdin)
-    else:
-        with open(file_name, 'r') as backup_file:
-            backup = json.load(backup_file)
+    def _device_restore_command(device, file_name):
+        if file_name is None:
+            backup = json.load(sys.stdin)
+        else:
+            with open(file_name, 'r') as backup_file:
+                backup = json.load(backup_file)
 
-    if 'days' in backup:
-        backup['days'] = [
-            [dict(start=_parse_time(period['start']),
-                  end=_parse_time(period['end']))
-             for period in day]
-            for day in backup['days']
-        ]
+        if 'days' in backup:
+            backup['days'] = [
+                [dict(start=_parse_time(period['start']),
+                      end=_parse_time(period['end']))
+                 for period in day]
+                for day in backup['days']
+            ]
 
-    if 'holidays' in backup:
-        backup['holidays'] = [
-            dict(start=_parse_datetime(holiday['start']),
-                 end=_parse_datetime(holiday['end']),
-                 temp=holiday['temp'])
-            for holiday in backup['holidays']
-        ]
+        if 'holidays' in backup:
+            backup['holidays'] = [
+                dict(start=_parse_datetime(holiday['start']),
+                     end=_parse_datetime(holiday['end']),
+                     temp=holiday['temp'])
+                for holiday in backup['holidays']
+            ]
 
-    with ctx.obj.device as device:
         device.restore(backup)
+        return 0
+
+    _queue_command(ctx, _device_restore_command, ctx.obj.device, file_name)
 
 
 @click.group(
@@ -477,40 +516,45 @@ def _device_restore(ctx, file_name):
 def _device(ctx, address, pin, pin_file):
     '''
     Get or set values.
-
-    You may use address 00:00:00:00:00:00 to access subcommand help without a real device.
     '''
-
-    class connection_manager(object):
-        def __init__(self, device):
-            self._device = device
-            if self._device is None:
-                return
-
-            device.connect()
-
-        def __call__(self):
-            if self._device is None:
-                return
-
-            self._device.disconnect()
-    def _setup_pin(ctx, pin, pin_file):
+    def _setup_pin(pin, pin_file):
         if pin_file is not None:
             with open(pin_file, 'r') as pin_file:
-                ctx.obj.pin = int(pin_file.read())
+                return int(pin_file.read())
         elif pin is not None:
-            ctx.obj.pin = int(pin)
+            return int(pin)
         else:
-            ctx.obj.pin = None
+            return None
 
-    _setup_pin(ctx, pin, pin_file)
+    pin = _setup_pin(pin, pin_file)
+    device = cometblue.device.CometBlue(address, ctx.obj.manager, pin)
+    ctx.obj.device = device
 
-    ctx.obj.device_address = address
-    ctx.obj.device = None
-    if address != "00:00:00:00:00:00":
-        ctx.obj.device = cometblue.device.CometBlue(ctx.obj.device_address, ctx.obj.manager, ctx.obj.pin)
+    def _device_connect_command(device):
+        device.connect()
+        return 0 if device.is_connected() else 1
+    def _device_disconnect_command(device):
+        device.disconnect()
+        return 0
 
-    ctx.call_on_close(connection_manager(ctx.obj.device))
+    _queue_command(ctx, _device_connect_command, device)
+    _queue_cleanup(ctx, _device_disconnect_command, device)
+
+    def _wait_for_device_ready_command(device):
+        _log.info('Waiting for device handler to become ready...')
+
+        if device is None:
+            return
+
+        device.attempt_to_get_ready()
+        if not device.ready():
+            raise RuntimeError("Waited for device to become ready for too long, aborting")
+        _log.debug("Device reports ready")
+
+        return 0
+
+    _queue_command(ctx, _wait_for_device_ready_command, device)
+
 
 @click.group(
         context_settings={'help_option_names': ['-h', '--help']},
@@ -539,29 +583,7 @@ def _device(ctx, address, pin, pin_file):
 @click.pass_context
 def _main(ctx, adapter, poweron, formatter, log_level):
     _configure_logger(_get_log_level(log_level))
-
     manager = cometblue.device.CometBlueManager(adapter_name = str(adapter))
-
-    class power_manager(object):
-        def __init__(self, manager, poweron_mgmt):
-            self._manager = manager
-            self._poweron_mgmt = poweron_mgmt and not manager.is_adapter_powered
-            if not self._poweron_mgmt:
-                return
-
-            _log.debug('Powering on bluetooth adapter %s' % (self._manager.adapter_name))
-            self._manager.is_adapter_powered = True
-
-        def __call__(self):
-            if not self._poweron_mgmt:
-                return
-
-            _log.debug('Shutting down bluetooth adapter %s' % (self._manager.adapter_name))
-            self._manager.is_adapter_powered = False
-
-    ctx.obj.manager = manager
-    ctx.call_on_close(power_manager(ctx.obj.manager, poweron))
-
     if formatter == 'json':
         ctx.obj.formatter = _JSONFormatter()
     elif formatter == 'human-readable':
@@ -569,7 +591,21 @@ def _main(ctx, adapter, poweron, formatter, log_level):
     else:
         ctx.obj.formatter = _ShellVarFormatter()
 
-    return os.EX_OK
+    def _main_command(ctx, manager, poweron):
+        def _powerdown_adapter_command(manager):
+            _log.debug('Shutting down bluetooth adapter %s' % (manager.adapter_name))
+            manager.is_adapter_powered = False
+
+        poweron_mgmt = poweron and not manager.is_adapter_powered
+        if poweron_mgmt:
+            _log.debug('Powering on bluetooth adapter %s' % (manager.adapter_name))
+            manager.is_adapter_powered = True
+            _queue_cleanup(ctx, _powerdown_adapter_command, manager)
+
+        return 0
+
+    ctx.obj.manager = manager
+    _queue_command(ctx, _main_command, ctx, manager, poweron)
 
 
 class _SetterFunctions(object):
@@ -705,11 +741,13 @@ def _enroll_subcommands():
         if 'decode' in val_conf:
             def get_fn_with_name(get_fn_name, print_fn_name):
                 def real_get_fn(ctx):
-                    with ctx.obj.device as device:
+                    def _get_command(device):
                         value = getattr(device, get_fn_name)()
 
-                    print_fn = getattr(ctx.obj.formatter, print_fn_name)
-                    print_fn(value)
+                        print_fn = getattr(ctx.obj.formatter, print_fn_name)
+                        print_fn(value)
+                        return 0
+                    _queue_command(ctx, _get_command, ctx.obj.device)
 
                 return real_get_fn
 
@@ -728,8 +766,9 @@ def _enroll_subcommands():
         if 'encode' in val_conf:
             def set_fn_with_name(set_fn_name):
                 def real_set_fn(ctx, value):
-                    with ctx.obj.device as device:
+                    def _set_command(device):
                         getattr(device, set_fn_name)(value)
+                    _queue_command(ctx, _set_command, ctx.obj.device)
 
                 return real_set_fn
 
@@ -743,9 +782,7 @@ def _enroll_subcommands():
             _device_set.add_command(set_fn)
 
 
-def _init_command_processing():
-    _configure_logger()
-
+def _init_command_parsing():
     _enroll_subcommands()
 
     _main.add_command(_discover)
@@ -765,18 +802,85 @@ def _init_command_processing():
     context = _ContextObj()
     return context
 
-def cli_main(argv):
-    context = _init_command_processing()
 
+# Bug in gatt-python, see https://github.com/getsenic/gatt-python/issues/5
+# efectively, this means that glib main loop has to run somewhere...
+class ManagerThread(threading.Thread):
+    def __init__(self, manager, kill_event):
+        super().__init__()
+        self._manager = manager
+        self._kill_event = kill_event
+
+    def run(self):
+        _log.debug("Manager thread running")
+        while True:
+            try:
+                self._manager.run()
+                break
+            except KeyboardInterrupt as ex:
+                self._kill_event.set()
+                _log.debug("Manager thread received kill, dropping out to notify main thread")
+                continue
+
+        _log.debug("Manager thread done")
+
+    def join(self):
+        self._manager.stop()
+        _log.debug("Manager thread done (join)")
+        super().join()
+
+class CliThread(threading.Thread):
+    def __init__(self, commands, kill_event):
+        super().__init__()
+        self._commands = commands
+        self._kill_event = kill_event
+
+    def run(self):
+        try:
+            # command parsing done, start manager thread
+            while self._commands and not self._kill_event.is_set():
+                command = self._commands.popleft()
+                rv = command()
+                if rv != 0:
+                    break
+        except Exception as ex:
+            _log.error('Command processing returned exception: ' + str(ex))
+        self._kill_event.set()
+
+def cli_main(argv):
+    _configure_logger()
+    context = _init_command_parsing()
+    context.commands = deque()
+    context.cleanup = deque()
+
+    # click is from now on used only for command parsing
     rv = 0
     try:
         rv = _main(obj=context, args=argv)
-    except RuntimeError as err:
-        print(str(err), file=sys.stderr)
-        rv = -1
     except SystemExit:
         pass
-    return rv
+    except (RuntimeError, Exception) as err:
+        _log.error(str(err))
+        return -1
+
+    somebody_killed = threading.Event()
+    manager_thread = ManagerThread(context.manager, somebody_killed)
+    cli_thread = CliThread(context.commands, somebody_killed)
+
+    context.device.aborter = lambda: somebody_killed.is_set()
+
+    manager_thread.start()
+    cli_thread.start()
+
+    # wait for either thread to be done
+    somebody_killed.wait()
+    cli_thread.join()
+
+    while context.cleanup:
+        command = context.cleanup.popleft()
+        rv = command()
+
+    manager_thread.join()
 
 def main():
     return cli_main(sys.argv[1:])
