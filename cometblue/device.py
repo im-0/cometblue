@@ -436,6 +436,12 @@ class CometBlue(gatt.Device):
         if pin_required and (self._pin is None):
             raise RuntimeError('PIN required')
 
+        if pin_required:
+            self._cb_wait_pinok()
+
+        if self.aborter():
+            raise StopIteration('Operation aborted due to external request')
+
         _log.debug('Reading value "%s" from "%s"...',
                    uuid, self.mac_address)
 
@@ -461,12 +467,51 @@ class CometBlue(gatt.Device):
             raise RuntimeError('Invalid table row number')
         return self._cb_read_value(_increase_uuid(uuid, n), decode, pin_required)
 
+    def characteristic_write_value_succeeded(self, characteristic):
+        _log.debug("write for " + characteristic.uuid + " succeeded")
+        self._cb_writes[characteristic.uuid] = True
+
+    def characteristic_write_value_failed(self, characteristic, error):
+        self._cb_writes[characteristic.uuid] = False
+        _log.error('Value write failed for characteristic "%s" with error "%s"' % (characteristic.uuid, error))
+
+    def _cb_wait_write_result(self, uuid):
+        iterations_limit = self._cb_complete_timeout / self._cb_complete_sleep
+        i = 0
+        while i < iterations_limit and not self.aborter():
+            i += 1
+            if not self.is_connected():
+                raise StopIteration('Device disconnected while waiting for reply')
+
+            if not self._cb_writes.get(uuid, None) is None:
+                return self._cb_writes[uuid]
+            time.sleep(self._cb_complete_sleep)
+
+        if self.aborter():
+            raise StopIteration('Operation aborted due to external request')
+
+        raise StopIteration('Operation has not been completed within timeout')
+
+
+    def _cb_wait_pinok(self):
+        uuid = self.SUPPORTED_VALUES['pin']['uuid']
+        if not self._cb_wait_write_result(uuid):
+            _log.debug('Failed to write pin characteristic')
+            raise StopIteration('Failed to write pin to device')
+
     def _cb_write_value(self, uuid, encode, value):
         if not self.is_connected():
             raise RuntimeError('Not connected')
 
         if self._pin is None:
             raise RuntimeError('PIN required')
+
+        # precaution - glib main loop runs in the same thread as services_discovered,
+        # therefore waiting for pin confirmation inside write would cause livelock, as there
+        # would be no main loop available for dbus call
+        pin_uuid = self.SUPPORTED_VALUES['pin']['uuid']
+        if pin_uuid != uuid:
+            self._cb_wait_pinok()
 
         _log.debug('Writing value "%s" to "%s": %r...',
                    uuid, self.mac_address, value)
@@ -478,15 +523,43 @@ class CometBlue(gatt.Device):
             else:
                 raise RuntimeError('Handle for characteristics uuid "%s" not found, perhaps sync issue?' % (uuid))
 
+        self._cb_writes[uuid] = None
         value = encode(value)
         characteristics_handle.write_value(value)
-        _log.debug('Wrote value "%s" to "%s": %r',
-                   uuid, self.mac_address, value)
+
+        if not self.blocking:
+            _log.debug('Assuming successfull write "%s" to "%s": %r', uuid, self.mac_address, value)
+            return
+
+        if self._cb_wait_write_result(uuid):
+            _log.debug('Confirmed write value "%s" to "%s": %r', uuid, self.mac_address, value)
+            return
+
+        _log.debug('Write failed for "%s" to "%s": %r', uuid, self.mac_address, value)
+
 
     def _cb_write_value_n(self, uuid, encode, max_n, n, value):
         if (n < 0) or (n >= max_n):
             raise RuntimeError('Invalid table row number')
         return self._cb_write_value(_increase_uuid(uuid, n), encode, value)
+
+    @property
+    def blocking(self):
+        return self._blocking
+
+    @blocking.setter
+    def blocking(self, blocking):
+        self._blocking = blocking
+
+    @property
+    def aborter(self):
+        return self._aborter
+
+    @aborter.setter
+    def aborter(self, aborter):
+        if aborter is None:
+            aborter = lambda: False
+        self._aborter = aborter
 
     @property
     def pin(self):
@@ -497,15 +570,20 @@ class CometBlue(gatt.Device):
         self._pin = _pin
         return self._pin
 
-    def __init__(self, mac_address, manager, pin=None):
+    def __init__(self, mac_address, manager, pin=None, aborter=None):
         super().__init__(mac_address, manager)
 
         self._cb_chars = None
+        self._cb_writes = {}
         self._pin = pin
         # for manual connect + disconnect vs. __enter__ vs. __exit__
         self._enter_nesting = 0
         self._cb_enter_managed_connection = True
         self._cb_setup_methods()
+        self._blocking = True
+        self.aborter = aborter
+        self._cb_complete_timeout = 60
+        self._cb_complete_sleep = 0.050
 
     def _cb_setup_methods(self):
         for val_name, val_conf in six.iteritems(self.SUPPORTED_VALUES):
@@ -556,6 +634,20 @@ class CometBlue(gatt.Device):
             + ", " \
             + ("services resolved" if self.is_services_resolved() else "pending service resolution") + "]"
 
+    def enumerate_unhandled_characteristics(self):
+        handled = []
+        for _, simple in self.SUPPORTED_VALUES.items():
+            handled.append(simple['uuid'])
+        for _, tabbed in self.SUPPORTED_TABLE_VALUES.items():
+            for i in range(tabbed['num']):
+                handled.append(_increase_uuid(tabbed['uuid'], i))
+
+        unhandled_characteristics = []
+        for characteristics in self._cb_chars.keys():
+            if characteristics not in handled:
+                unhandled_characteristics.append(characteristics)
+        return unhandled_characteristics
+
     def services_resolved(self):
         super().services_resolved()
         self._cb_chars = dict(
@@ -568,14 +660,28 @@ class CometBlue(gatt.Device):
 
         if self._pin is not None:
             try:
+                self.blocking = False
                 self.set_pin(self._pin)
             except RuntimeError as exc:
                 raise RuntimeError('Invalid PIN', exc)
+            finally:
+                self.blocking = True
+
+        unhandled_characteristics = self.enumerate_unhandled_characteristics()
+        if unhandled_characteristics:
+            _log.info('Unknown characteristics discovered on "%s": %r',
+                self.mac_address, unhandled_characteristics)
+
 
     def __enter__(self):
         self._enter_nesting += 1
         if not self.is_connected():
             self.connect()
+
+        self.attempt_to_get_ready()
+        if not self.ready():
+            raise RuntimeError("Unable to connect & resolve the device")
+
         return self
 
     def connect(self):
@@ -589,8 +695,16 @@ class CometBlue(gatt.Device):
         if not self.is_connected():
             raise RuntimeError('Failed to connect the device')
 
+    def attempt_to_get_ready(self):
+        iterations_limit = self._cb_complete_timeout / self._cb_complete_sleep
+        i = 0
+        while not self.ready() and i < iterations_limit:
+                i += 1
+                time.sleep(self._cb_complete_sleep)
+        return self.ready()
+
     def ready(self):
-        return self.is_connected() and self.is_services_resolved() and self._cb_chars
+        return self.is_connected() and self.is_services_resolved() and bool(self._cb_chars)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._enter_nesting -= 1
