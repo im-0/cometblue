@@ -487,27 +487,28 @@ def _device(ctx, address, pin, pin_file):
             if self._device is None:
                 return
 
-            device.manual_connect()
+            device.connect()
 
         def __call__(self):
             if self._device is None:
                 return
 
-            self._device.manual_disconnect()
+            self._device.disconnect()
+    def _setup_pin(ctx, pin, pin_file):
+        if pin_file is not None:
+            with open(pin_file, 'r') as pin_file:
+                ctx.obj.pin = int(pin_file.read())
+        elif pin is not None:
+            ctx.obj.pin = int(pin)
+        else:
+            ctx.obj.pin = None
 
-    if pin_file is not None:
-        with open(pin_file, 'r') as pin_file:
-            ctx.obj.pin = int(pin_file.read())
-    elif pin is not None:
-        ctx.obj.pin = int(pin)
-    else:
-        ctx.obj.pin = None
+    _setup_pin(ctx, pin, pin_file)
 
     ctx.obj.device_address = address
     ctx.obj.device = None
     if address != "00:00:00:00:00:00":
-        gattdevice = gatt.Device(ctx.obj.device_address, ctx.obj.manager)
-        ctx.obj.device = cometblue.device.CometBlue(gattdevice, ctx.obj.pin)
+        ctx.obj.device = cometblue.device.CometBlue(ctx.obj.device_address, ctx.obj.manager, ctx.obj.pin)
 
     ctx.call_on_close(connection_manager(ctx.obj.device))
 
@@ -539,7 +540,7 @@ def _device(ctx, address, pin, pin_file):
 def _main(ctx, adapter, poweron, formatter, log_level):
     _configure_logger(_get_log_level(log_level))
 
-    manager = gatt.DeviceManager(adapter_name = str(adapter))
+    manager = cometblue.device.CometBlueManager(adapter_name = str(adapter))
 
     class power_manager(object):
         def __init__(self, manager, poweron_mgmt):

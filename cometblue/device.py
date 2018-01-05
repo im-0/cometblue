@@ -319,8 +319,14 @@ def _increase_uuid(uuid_str, n):
     uuid_fields[0] += n
     return str(uuid_module.UUID(fields=uuid_fields))
 
+class CometBlueManager(gatt.DeviceManager):
+    def __init__(self, adapter_name):
+        super().__init__(adapter_name)
 
-class CometBlue(object):
+    def make_device(self, mac_address):
+        return CometBlue(mac_address = mac_address, manager = self)
+
+class CometBlue(gatt.Device):
     SUPPORTED_VALUES = {
         'device_name': {
             'description': 'device name',
@@ -423,49 +429,51 @@ class CometBlue(object):
         },
     }
 
-    def _read_value(self, uuid, decode, pin_required):
-        if not self._device.is_connected():
+    def _cb_read_value(self, uuid, decode, pin_required):
+        if not self.is_connected():
             raise RuntimeError('Not connected')
+
         if pin_required and (self._pin is None):
             raise RuntimeError('PIN required')
 
         _log.debug('Reading value "%s" from "%s"...',
-                   uuid, self._device.mac_address)
+                   uuid, self.mac_address)
 
-        characteristics_handle = self._chars.get(uuid, None)
+        characteristics_handle = self._cb_chars.get(uuid, None)
         if characteristics_handle is None:
             raise RuntimeError('Handle for uuid "%s" not found, perhaps sync issue?' % (uuid))
 
         value = characteristics_handle.read_value()
 
         _log.debug('Read value "%s" from "%s": %r',
-                   uuid, self._device.mac_address, value)
+                   uuid, self.mac_address, value)
         if len(value.signature) != 1:
             raise RuntimeError('Got more than one value')
 
         value = bytes(int(byte) for byte in value)
         value = decode(value)
         _log.debug('Decoded value "%s" from "%s": %r',
-                   uuid, self._device.mac_address, value)
+                   uuid, self.mac_address, value)
         return value
 
-    def _read_value_n(self, uuid, decode, pin_required, max_n, n):
+    def _cb_read_value_n(self, uuid, decode, pin_required, max_n, n):
         if (n < 0) or (n >= max_n):
             raise RuntimeError('Invalid table row number')
-        return self._read_value(_increase_uuid(uuid, n), decode, pin_required)
+        return self._cb_read_value(_increase_uuid(uuid, n), decode, pin_required)
 
-    def _write_value(self, uuid, encode, value):
-        if not self._device.is_connected():
+    def _cb_write_value(self, uuid, encode, value):
+        if not self.is_connected():
             raise RuntimeError('Not connected')
+
         if self._pin is None:
             raise RuntimeError('PIN required')
 
         _log.debug('Writing value "%s" to "%s": %r...',
-                   uuid, self._device.mac_address, value)
+                   uuid, self.mac_address, value)
 
-        characteristics_handle = self._chars.get(uuid, None)
+        characteristics_handle = self._cb_chars.get(uuid, None)
         if characteristics_handle is None:
-            if self._chars:
+            if self._cb_chars:
                 raise NotImplementedError('Device does not offer characteristics with uuid "%s", required to fulfill the request' % (uuid))
             else:
                 raise RuntimeError('Handle for characteristics uuid "%s" not found, perhaps sync issue?' % (uuid))
@@ -473,28 +481,40 @@ class CometBlue(object):
         value = encode(value)
         characteristics_handle.write_value(value)
         _log.debug('Wrote value "%s" to "%s": %r',
-                   uuid, self._device.mac_address, value)
+                   uuid, self.mac_address, value)
 
-    def _write_value_n(self, uuid, encode, max_n, n, value):
+    def _cb_write_value_n(self, uuid, encode, max_n, n, value):
         if (n < 0) or (n >= max_n):
             raise RuntimeError('Invalid table row number')
-        return self._write_value(_increase_uuid(uuid, n), encode, value)
+        return self._cb_write_value(_increase_uuid(uuid, n), encode, value)
 
-    def __init__(self, gattDevice, pin=None):
-        self._device = gattDevice
-        self._chars = None
+    @property
+    def pin(self):
+        return self._pin
+
+    @pin.setter
+    def pin(self, _pin):
+        self._pin = _pin
+        return self._pin
+
+    def __init__(self, mac_address, manager, pin=None):
+        super().__init__(mac_address, manager)
+
+        self._cb_chars = None
         self._pin = pin
         # for manual connect + disconnect vs. __enter__ vs. __exit__
-        self._entered = False
-        self._locked = False
+        self._enter_nesting = 0
+        self._cb_enter_managed_connection = True
+        self._cb_setup_methods()
 
+    def _cb_setup_methods(self):
         for val_name, val_conf in six.iteritems(self.SUPPORTED_VALUES):
             if 'decode' in val_conf:
                 setattr(
                         self,
                         'get_' + val_name,
                         functools.partial(
-                                self._read_value,
+                                self._cb_read_value,
                                 str(val_conf['uuid']),
                                 val_conf['decode'],
                                 val_conf.get('read_requires_pin', False)))
@@ -503,7 +523,7 @@ class CometBlue(object):
                         self,
                         'set_' + val_name,
                         functools.partial(
-                                self._write_value,
+                                self._cb_write_value,
                                 str(val_conf['uuid']),
                                 val_conf['encode']))
 
@@ -513,7 +533,7 @@ class CometBlue(object):
                         self,
                         'get_' + val_name,
                         functools.partial(
-                                self._read_value_n,
+                                self._cb_read_value_n,
                                 str(val_conf['uuid']),
                                 val_conf['decode'],
                                 val_conf.get('read_requires_pin', False),
@@ -523,45 +543,28 @@ class CometBlue(object):
                         self,
                         'set_' + val_name,
                         functools.partial(
-                                self._write_value_n,
+                                self._cb_write_value_n,
                                 str(val_conf['uuid']),
                                 val_conf['encode'],
                                 val_conf['num']))
 
     def __str__(self):
         return \
-            "device_" + self._device.alias() \
-            + "@" + self._device.mac_address + "_[" \
-            + ("connected" if self._device.is_connected() else "disconnected") \
+            "device_" + self.alias() \
+            + "@" + self.mac_address + "_[" \
+            + ("connected" if self.is_connected() else "disconnected") \
             + ", " \
-            + ("services resolved" if self._device.is_services_resolved() else "pending service resolution") + "]"
+            + ("services resolved" if self.is_services_resolved() else "pending service resolution") + "]"
 
-    def _connect(self):
-        _log.info('Connecting to device "%s"...', self._device.mac_address)
-        self._device.connect()
-
-        if not self._device.is_connected():
-            raise RuntimeError('Failed to connect the device')
-
-        _log.debug('Discovering characteristics for "%s"...',
-                   self._device.mac_address)
-
-        while not self._device.services and self._device.is_connected() and not self._device.is_services_resolved():
-            time.sleep(0.020)
-        if not self._device.is_connected() or not self._device.is_services_resolved():
-            raise RuntimeError('Failed to resolve device services')
-
-        # BUG: gatt does not always correctly update service list
-        self._device.services_resolved()
-        _log.debug('Characteristics resolved for "%s": %r', self._device.mac_address, self._device.services)
-
-        services = self._device.services
-        self._chars = dict(
+    def services_resolved(self):
+        super().services_resolved()
+        self._cb_chars = dict(
                 (str(characteristics_handle.uuid), characteristics_handle)
-                for service_handle in services
+                for service_handle in self.services
                 for characteristics_handle in service_handle.characteristics )
+
         _log.debug('Discovered characteristics for "%s": %r',
-                   self._device.mac_address, self._chars.keys())
+                   self.mac_address, self._cb_chars.keys())
 
         if self._pin is not None:
             try:
@@ -569,45 +572,42 @@ class CometBlue(object):
             except RuntimeError as exc:
                 raise RuntimeError('Invalid PIN', exc)
 
-        _log.info('Connected to device "%s"', self._device.mac_address)
-        self._entered = True
-        return self
-
     def __enter__(self):
-        if not self._entered:
-            self._connect()
-
+        self._enter_nesting += 1
+        if not self.is_connected():
+            self.connect()
         return self
 
-    def manual_connect(self):
-        if not self._entered:
-            self._connect()
-        self._locked = True
+    def connect(self):
+        # if connect() is called before __enter__, make it not managed
+        if self._enter_nesting == 0:
+            self._cb_enter_managed_connection = False
 
-    def _disconnect(self):
-        if not self._entered:
-            return
+        _log.info('Connecting to device "%s"...', self.mac_address)
+        super().connect()
 
-        self._entered = False
+        if not self.is_connected():
+            raise RuntimeError('Failed to connect the device')
 
-        if not self._device.is_connected():
-            return
-
-        _log.info('Disconnecting from device "%s"...', self._device.mac_address)
-        try:
-            self._device.disconnect()
-            _log.info('Disconnected from device "%s"', self._device.mac_address)
-        except:
-            _log.error('Failed disconnect from device "%s", considering disconnected anyway', self._device.mac_address)
-
-    def manual_disconnect(self):
-        if self._locked:
-            self._disconnect()
-        self._locked = False
+    def ready(self):
+        return self.is_connected() and self.is_services_resolved() and self._cb_chars
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if not self._locked:
-            self._disconnect()
+        self._enter_nesting -= 1
+
+        if self._enter_nesting == 0 and self._cb_enter_managed_connection:
+            self.disconnect()
+
+    def disconnect(self):
+        if not self.is_connected():
+            return
+
+        _log.info('Disconnecting from device "%s"...', self.mac_address)
+        try:
+            super().disconnect()
+            _log.info('Disconnected from device "%s"', self.mac_address)
+        except:
+            _log.error('Failed disconnect from device "%s", considering disconnected anyway', self.mac_address)
 
     def get_days(self):
         return list(map(self.get_day, range(7)))
@@ -617,7 +617,7 @@ class CometBlue(object):
 
     def backup(self):
         _log.info('Saving all supported values from "%s"...',
-                  self._device.mac_address)
+                  self.mac_address)
 
         data = {}
 
@@ -634,7 +634,7 @@ class CometBlue(object):
         for val_name in 'days', 'holidays':
             data[val_name] = getattr(self, 'get_' + val_name)()
 
-        _log.info('All supported values from "%s" saved', self._device.mac_address)
+        _log.info('All supported values from "%s" saved', self.mac_address)
 
         return data
 
@@ -648,7 +648,7 @@ class CometBlue(object):
 
     def restore(self, data):
         _log.info('Restoring values from backup for "%s"...',
-                  self._device.mac_address)
+                  self.mac_address)
         _log.debug('Backup data: %r', data)
 
         for val_name, val_data in six.iteritems(data):
@@ -658,4 +658,4 @@ class CometBlue(object):
             self.set_datetime(datetime.datetime.now())
 
         _log.info('Values from backup for "%s" successfully restored',
-                  self._device.mac_address)
+                  self.mac_address)

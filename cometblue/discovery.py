@@ -34,12 +34,12 @@ def discover(manager, timeout=10):
         name = _device.alias()
         address = _device.mac_address
         try:
-            with cometblue.device.CometBlue(_device, None) as device:
+            with _device as device:
                 manufacturer_name = device.get_manufacturer_name().lower()
                 model_number = device.get_model_number().lower()
 
                 if (manufacturer_name, model_number) in _SUPPORTED_DEVICES:
-                    filtered_devices[device._device.mac_address] = name
+                    filtered_devices[device.mac_address] = name
 
         except RuntimeError as exc:
             _log.debug('Skipping device "%s" ("%s") because of '
