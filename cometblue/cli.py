@@ -675,7 +675,7 @@ class _SetterFunctions(object):
                 raise RuntimeError(
                         'No status flags to update, try "status -h"')
 
-            if ctx.obj.device._device.is_connected():
+            if ctx.obj.device.is_connected():
                 current = ctx.obj.device.get_status()
                 current = dict((k, v) for k, v in current.items() if k in keys)
                 for k, v in status.items():
