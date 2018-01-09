@@ -300,9 +300,13 @@ def _discover(ctx, timeout):
     filtered_devices = {}
 
     def _probe_command(device, filtered_devices):
-        device_entry = cometblue.discovery.probe_candidate(device)
-        if not device_entry is None:
-            filtered_devices.update(dict([device_entry]))
+        try:
+            device_entry = cometblue.discovery.probe_candidate(device)
+            if not device_entry is None:
+                filtered_devices.update(dict([device_entry]))
+        except RuntimeError as e:
+            _log.debug("Probe failed for " + device + " with error: %s", e)
+            pass
         return 0
 
     def _discovery_results_command(filtered_devices, formatter):
@@ -884,7 +888,10 @@ def cli_main(argv):
     manager_thread = ManagerThread(context.manager, somebody_killed)
     cli_thread = CliThread(context.commands, somebody_killed)
 
-    context.device.aborter = lambda: somebody_killed.is_set()
+    try:
+        context.device.aborter = lambda: somebody_killed.is_set()
+    except AttributeError:
+        pass
 
     manager_thread.start()
     cli_thread.start()
