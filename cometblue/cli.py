@@ -827,14 +827,14 @@ def _init_command_parsing():
 # Bug in gatt-python, see https://github.com/getsenic/gatt-python/issues/5
 # efectively, this means that glib main loop has to run somewhere...
 class ManagerThread(threading.Thread):
-    def __init__(self, manager, kill_event):
+    def __init__(self, context, kill_event):
         super().__init__()
-        self._manager = manager
+        self._manager = context.manager
         self._kill_event = kill_event
 
     def run(self):
         _log.debug("Manager thread running")
-        while True:
+        while self._manager:
             try:
                 self._manager.run()
                 break
@@ -846,15 +846,18 @@ class ManagerThread(threading.Thread):
         _log.debug("Manager thread done")
 
     def join(self):
-        self._manager.stop()
+        if self._manager:
+            self._manager.stop()
         _log.debug("Manager thread done (join)")
         super().join()
 
 class CliThread(threading.Thread):
-    def __init__(self, commands, kill_event):
+    def __init__(self, context, kill_event):
         super().__init__()
-        self._commands = commands
+        self._commands = context.commands
         self._kill_event = kill_event
+        if context.device:
+            context.device.aborter = lambda: kill_event.is_set()
 
     def run(self):
         try:
@@ -873,9 +876,14 @@ def cli_main(argv):
     context = _init_command_parsing()
     context.commands = deque()
     context.cleanup = deque()
+    context.manager = None
+    context.device = None
 
     # click is from now on used only for command parsing
     rv = 0
+    somebody_killed = threading.Event()
+    manager_thread = None
+    cli_thread = None
     try:
         rv = _main(obj=context, args=argv)
     except SystemExit:
@@ -883,15 +891,9 @@ def cli_main(argv):
     except (RuntimeError, Exception) as err:
         _log.error(str(err))
         return -1
-
-    somebody_killed = threading.Event()
-    manager_thread = ManagerThread(context.manager, somebody_killed)
-    cli_thread = CliThread(context.commands, somebody_killed)
-
-    try:
-        context.device.aborter = lambda: somebody_killed.is_set()
-    except AttributeError:
-        pass
+    
+    manager_thread = ManagerThread(context, somebody_killed)
+    cli_thread = CliThread(context, somebody_killed)
 
     manager_thread.start()
     cli_thread.start()
