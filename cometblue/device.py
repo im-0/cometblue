@@ -720,6 +720,8 @@ class CometBlue(gatt.Device):
         try:
             super().disconnect()
             _log.info('Disconnected from device "%s"', self.mac_address)
+            self._cb_chars = None
+            self._cb_writes = {}
         except:
             _log.error('Failed disconnect from device "%s", considering disconnected anyway', self.mac_address)
 
