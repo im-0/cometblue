@@ -147,18 +147,18 @@ def _decode_battery(value):
     return value
 
 
-def _decode_lcd_timer(value):
-    preload, current = struct.unpack(_LCD_TIMER_STRUCT_PACKING, value)
+def _decode_lcd_timeout(value):
+    default, current = struct.unpack(_LCD_TIMER_STRUCT_PACKING, value)
     return {
-        'preload': preload,
+        'default': default,
         'current': current,
     }
 
 
-def _encode_lcd_timer(lcd_timer):
+def _encode_lcd_timeout(lcd_timeout):
     return struct.pack(
             _LCD_TIMER_STRUCT_PACKING,
-            lcd_timer['preload'],
+            lcd_timeout['default'],
             0)
 
 
@@ -396,12 +396,12 @@ class CometBlue(gatt.Device):
             'decode': _decode_str,
         },
 
-        'lcd_timer': {
-            'description': 'LCD timer',
+        'lcd_timeout': {
+            'description': 'LCD timeout',
             'uuid': '47e9ee2e-47e9-11e4-8939-164230d1df67',
             'read_requires_pin': True,
-            'decode': _decode_lcd_timer,
-            'encode': _encode_lcd_timer,
+            'decode': _decode_lcd_timeout,
+            'encode': _encode_lcd_timeout,
         },
 
         'pin': {

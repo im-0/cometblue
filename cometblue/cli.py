@@ -125,8 +125,9 @@ class _HumanReadableFormatter(object):
         self._stream.write(text)
         self._stream.flush()
 
-    def print_lcd_timer(self, value):
-        self._print_simple('%02u:%02u' % (value['preload'], value['current']))
+    def print_lcd_timeout(self, value):
+        self._print_simple('Default timeout:\t%02u' % (value['default'])
+        self._print_simple('Timeout in progress:\t%02u' % (value['current']))
 
     def print_days(self, value):
         table = zip(
@@ -211,9 +212,9 @@ class _ShellVarFormatter(object):
                         var_name.upper(), shellescape.quote(val_str)))
         self._stream.flush()
 
-    def print_lcd_timer(self, value):
-        self._print_simple('lcd_timer_preload', '%u' % value['preload'])
-        self._print_simple('lcd_timer_current', '%u' % value['current'])
+    def print_lcd_timeout(self, value):
+        self._print_simple('lcd_timeout_default', '%u' % value['default'])
+        self._print_simple('lcd_timeout_current', '%u' % value['current'])
 
     def print_days(self, value):
         for day_n, day in zip(itertools.count(), value):
@@ -742,18 +743,18 @@ class _SetterFunctions(object):
         return set_temperatures
 
     @staticmethod
-    def lcd_timer(real_setter):
+    def lcd_timeout(real_setter):
         @click.argument(
                 'value',
                 required=True)
         @click.pass_context
-        def set_lcd_timer(ctx, value):
-            lcd_timer = {
-                'preload': int(value),
+        def set_lcd_timeout(ctx, value):
+            lcd_timeout = {
+                'default': int(value),
             }
-            real_setter(ctx, lcd_timer)
+            real_setter(ctx, lcd_timeout)
 
-        return set_lcd_timer
+        return set_lcd_timeout
 
 
 def _enroll_subcommands():

@@ -92,7 +92,7 @@ Commands:
   firmware_revision   Get firmware revision
   firmware_revision2  Get firmware revision #2 (requires PIN)
   holidays            Get configured holidays (requires PIN)
-  lcd_timer           Get LCD timer (requires PIN)
+  lcd_timeout         Get LCD timeout settings (requires PIN)
   manufacturer_name   Get manufacturer name
   model_number        Get model number
   software_revision   Get software revision
@@ -139,7 +139,7 @@ Commands:
   datetime      Set time and date (requires PIN)
   day           Set periods per days of the week (requires...
   holiday       Set period and temperature for holiday...
-  lcd_timer     Set LCD timer (requires PIN)
+  lcd_timeout   Set LCD blank timeout (requires PIN)
   pin           Set PIN (requires PIN)
   status        Set status (requires PIN)
   temperatures  Set temperatures (requires PIN)
