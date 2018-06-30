@@ -126,7 +126,7 @@ class _HumanReadableFormatter(object):
         self._stream.flush()
 
     def print_lcd_timeout(self, value):
-        self._print_simple('Default timeout:\t%02u' % (value['default'])
+        self._print_simple('Default timeout:\t%02u' % (value['default']))
         self._print_simple('Timeout in progress:\t%02u' % (value['current']))
 
     def print_days(self, value):
