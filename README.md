@@ -6,17 +6,20 @@ From the software point of view, "Comet Blue" is an BLE (Bluetooth Low Energy) d
 
 This project provides python library and command line tool which may be used to control "Comet Blue" from any linux system equipped with Bluetooth adapter (USB Bluetooth 4.0 dongle, for example).
 
+This project is fork of https://github.com/im-0/cometblue rewrited with library https://github.com/getsenic/gatt-python
+
 ## Installation
 From sources:
 ```
 # Install dependencies
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 # Install cometblue
-python setup.py install
+python3 setup.py install
 ```
-Using *pip*:
+Using *pip* (unsupported):
+(currently only original project, this fork is unsupported)
 ```
-pip install cometblue
+pip3 install cometblue
 ```
 
 ## Command line tool
@@ -28,6 +31,8 @@ Usage: cometblue [OPTIONS] COMMAND [ARGS]...
 
 Options:
   -a, --adapter TEXT              Bluetooth adapter interface  [default: hci0]
+  -p, --poweron                   Power ON/OFF adapter if needed  [default:
+                                  False]
   -f, --formatter [json|human-readable|shell-var]
                                   Output formatter  [default: human-readable]
   -L, --log-level TEXT            [default: error]
@@ -86,12 +91,12 @@ Commands:
   device_name         Get device name
   firmware_revision   Get firmware revision
   firmware_revision2  Get firmware revision #2 (requires PIN)
-  flags               Get flags (requires PIN)
   holidays            Get configured holidays (requires PIN)
-  lcd_timer           Get LCD timer (requires PIN)
+  lcd_timeout         Get LCD timeout settings (requires PIN)
   manufacturer_name   Get manufacturer name
   model_number        Get model number
   software_revision   Get software revision
+  status              Get status (requires PIN)
   temperatures        Get temperatures (requires PIN)
 ```
 Usage examples:
@@ -103,13 +108,13 @@ Usage examples:
 2016-03-27 18:32:00
 
 # cometblue device -p 0 E0:E5:CF:D6:98:53 get temperatures
-Current temperature: 23.0 °C
-Temperature for manual mode: 16.0 °C
-Target temperature low: 16.0 °C
-Target temperature high: 21.0 °C
-Offset temperature: 0.0 °C
-Window open detection: 4
-Window open minutes: 10
+Current temperature:    23.0 °C
+Temperature for manual mode:    16.0 °C
+Target temperature low:         16.0 °C
+Target temperature high:        21.0 °C
+Offset temperature:     0.0 °C
+Window open sensitivity:        4 (1 = low, 4 = high, 8 = mid)
+Window open minutes:    10
 
 # cometblue device E0:E5:CF:D6:98:53 get device_name  # no PIN required
 Comet Blue
@@ -134,8 +139,9 @@ Commands:
   datetime      Set time and date (requires PIN)
   day           Set periods per days of the week (requires...
   holiday       Set period and temperature for holiday...
-  lcd_timer     Set LCD timer (requires PIN)
+  lcd_timeout   Set LCD blank timeout (requires PIN)
   pin           Set PIN (requires PIN)
+  status        Set status (requires PIN)
   temperatures  Set temperatures (requires PIN)
 ```
 Usage examples:
@@ -214,10 +220,8 @@ Usage example:
 - http://torsten-traenkner.de/wissen/smarthome/heizung.php
 
 ## TODO
-- Support flags
 - Support timer
 - Write tests
-- Python3
 
 ## Notes
 Tool and library may not work as expected because it is not well tested. Patches and bugreports are always welcome.

@@ -1,5 +1,5 @@
 click
-gattlib
+gatt
 pbr
 shellescape
 six
